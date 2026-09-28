@@ -1,0 +1,117 @@
+/*
+  The box rows use a flex layout with `min-width: 0` and wrapping text so a
+  box can never exceed the width of its container. The previous grid layout
+  used an `auto` column sized by an uppercase label, whose min-content width
+  was larger than the space offered inside narrow deck rows, which pushed the
+  row content outside the card.
+*/
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.boxRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  min-width: 0;
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  text-align: center;
+  transition:
+    border-color var(--duration-normal) var(--ease-out),
+    background var(--duration-normal) var(--ease-out);
+}
+
+.boxIndex {
+  font-size: var(--text-xs);
+  color: var(--color-text-dim);
+  letter-spacing: var(--tracking-wide);
+}
+
+.boxCount {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+}
+
+.boxEmpty .boxCount {
+  color: var(--color-text-dim);
+}
+
+/* Clickable box */
+.clickable {
+  cursor: pointer;
+  transition:
+    border-color var(--duration-normal) var(--ease-out),
+    background var(--duration-normal) var(--ease-out),
+    transform var(--duration-micro) var(--ease-out);
+}
+
+.clickable:hover {
+  border-color: var(--color-line-strong);
+}
+
+.clickable:active {
+  transform: scale(0.985);
+}
+
+/* Priority box — emphasised with a restrained spectrum edge */
+.priority {
+  border-color: var(--color-spectrum-purple);
+  background: rgba(141, 34, 255, 0.07);
+}
+
+.priority .boxIndex {
+  color: var(--color-spectrum-purple);
+}
+
+/* Explicitly selected box */
+.selected {
+  border-color: var(--color-spectrum-purple);
+  background: rgba(141, 34, 255, 0.12);
+}
+
+.selected .boxCount {
+  color: var(--color-text);
+}
+
+/* Compact variant */
+.compact .box {
+  padding: var(--space-sm) var(--space-md);
+}
+
+/* Distribution bar — neutral by default, spectrum only on the priority box */
+.distribution {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  gap: 2px;
+  margin-top: var(--space-md);
+}
+
+.segment {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--color-text-dim);
+  transition: flex var(--duration-slow) var(--ease-out);
+}
+
+.segmentActive {
+  background: var(--color-spectrum-purple);
+}

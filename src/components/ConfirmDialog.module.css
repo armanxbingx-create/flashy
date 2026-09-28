@@ -1,0 +1,89 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  animation: fadeIn var(--duration-normal) var(--ease-out);
+}
+
+.dialog {
+  width: 100%;
+  max-width: 340px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  animation: scaleIn var(--duration-normal) var(--ease-out);
+}
+
+.dialogBody {
+  padding: var(--space-xl);
+  text-align: center;
+}
+
+.dialogTitle {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  margin-bottom: var(--space-sm);
+}
+
+.dialogMessage {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: var(--leading-relaxed);
+}
+
+.dialogActions {
+  display: flex;
+  border-top: 1px solid var(--color-line);
+}
+
+.dialogButton {
+  flex: 1;
+  padding: var(--space-lg);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    background var(--duration-micro) var(--ease-out),
+    color var(--duration-micro) var(--ease-out);
+  border: none;
+  background: none;
+  color: var(--color-text);
+}
+
+.dialogButton:active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dialogButton + .dialogButton {
+  border-left: 1px solid var(--color-line);
+}
+
+.dialogCancel {
+  color: var(--color-text-muted);
+}
+
+.dialogDestructive {
+  color: var(--color-incorrect);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay { animation: none; }
+  .dialog { animation: none; }
+}

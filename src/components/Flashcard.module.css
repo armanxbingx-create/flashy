@@ -1,0 +1,203 @@
+.container {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  perspective: 1000px;
+  margin: 0 auto;
+}
+
+@supports (height: 100dvh) {
+  .container {
+    width: min(100%, 380px, calc((100dvh - var(--card-chrome, 0px)) * 0.75));
+  }
+}
+
+.card {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius-hero);
+  overflow: hidden;
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform var(--duration-card) var(--ease-out);
+  will-change: transform;
+}
+
+.card:active {
+  cursor: grabbing;
+}
+
+/* Card surface */
+.surface {
+  position: absolute;
+  inset: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3xl);
+  gap: var(--space-xl);
+}
+
+/* Spectrum edge on front */
+.spectrumEdge {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    var(--color-spectrum-pink),
+    var(--color-spectrum-magenta),
+    var(--color-spectrum-purple),
+    var(--color-spectrum-orange),
+    var(--color-spectrum-yellow)
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.15;
+  pointer-events: none;
+}
+
+.word {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  text-align: center;
+  line-height: var(--leading-tight);
+}
+
+.backContent {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-regular);
+  color: var(--color-text-muted);
+  text-align: center;
+  line-height: var(--leading-normal);
+  max-width: 280px;
+}
+
+/* Progress indicator */
+.progress {
+  position: absolute;
+  top: var(--space-lg);
+  left: var(--space-lg);
+  right: var(--space-lg);
+  display: flex;
+  gap: 3px;
+}
+
+.progressDot {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--color-line);
+  transition: background var(--duration-normal) var(--ease-out);
+}
+
+.progressDotFilled {
+  background: var(--color-spectrum-purple);
+}
+
+/* Reveal hint */
+.revealHint {
+  position: absolute;
+  bottom: var(--space-xl);
+  font-size: var(--text-xs);
+  color: var(--color-text-dim);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  font-weight: var(--weight-medium);
+}
+
+/* Swipe indicators */
+.swipeIndicator {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  opacity: 0;
+  transition: opacity var(--duration-micro) var(--ease-out);
+  pointer-events: none;
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: var(--radius-sm);
+}
+
+.swipeLeft {
+  left: var(--space-xl);
+  color: var(--color-incorrect);
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.swipeRight {
+  right: var(--space-xl);
+  color: var(--color-correct);
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+}
+
+/* Swipe states */
+.swipingLeft .swipeLeft {
+  opacity: 1;
+}
+
+.swipingRight .swipeRight {
+  opacity: 1;
+}
+
+/* Actions below card */
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-lg);
+  margin-top: var(--space-lg);
+}
+
+/* Animation states */
+.swipeExitRight {
+  animation: cardSwipeRight var(--duration-card) var(--ease-out) forwards;
+}
+
+.swipeExitLeft {
+  animation: cardSwipeLeft var(--duration-card) var(--ease-out) forwards;
+}
+
+.cardEnter {
+  animation: cardEnter var(--duration-card) var(--ease-out) forwards;
+}
+
+@keyframes cardSwipeRight {
+  0% { transform: translateX(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateX(110%) rotate(8deg); opacity: 0; }
+}
+
+@keyframes cardSwipeLeft {
+  0% { transform: translateX(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateX(-110%) rotate(-8deg); opacity: 0; }
+}
+
+@keyframes cardEnter {
+  0% { transform: scale(0.94) translateY(16px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .swipeExitRight,
+  .swipeExitLeft,
+  .cardEnter {
+    animation: none;
+  }
+  .card {
+    transition: none;
+  }
+}

@@ -1,0 +1,63 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-toast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  animation: feedbackFlash 400ms var(--ease-out) forwards;
+}
+
+.correct {
+  background: rgba(52, 211, 153, 0.15);
+}
+
+.incorrect {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: feedbackIconPop 400ms var(--ease-out) forwards;
+}
+
+.correct .icon {
+  background: var(--color-correct);
+  color: var(--color-text);
+  box-shadow: 0 0 40px rgba(52, 211, 153, 0.4);
+}
+
+.incorrect .icon {
+  background: var(--color-incorrect);
+  color: white;
+  box-shadow: 0 0 40px rgba(239, 68, 68, 0.4);
+}
+
+@keyframes feedbackFlash {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes feedbackIconPop {
+  0% { transform: scale(0.5); opacity: 0; }
+  30% { transform: scale(1.15); opacity: 1; }
+  60% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay {
+    animation: none;
+    opacity: 0;
+  }
+  .icon {
+    animation: none;
+  }
+}

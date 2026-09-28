@@ -1,0 +1,92 @@
+.wrapper {
+  position: relative;
+  overflow: hidden;
+}
+
+.glow {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-out);
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 0;
+  will-change: opacity;
+}
+
+.wrapper:hover .glow,
+.wrapper[data-active="true"] .glow {
+  opacity: 1;
+}
+
+.spectrumBg {
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(
+    135deg,
+    var(--color-spectrum-pink),
+    var(--color-spectrum-magenta),
+    var(--color-spectrum-purple),
+    var(--color-spectrum-orange),
+    var(--color-spectrum-yellow)
+  );
+  background-size: 200% 200%;
+  animation: spectrumShift 6s ease-in-out infinite;
+  opacity: 0.6;
+  filter: blur(16px);
+  border-radius: inherit;
+  will-change: background-position;
+}
+
+.spectrumEdge {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    var(--color-spectrum-pink),
+    var(--color-spectrum-magenta),
+    var(--color-spectrum-purple),
+    var(--color-spectrum-orange),
+    var(--color-spectrum-yellow)
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+}
+
+/* Always-on variant */
+.alwaysOn .glow {
+  opacity: 1;
+}
+
+/* Subtle variant */
+.subtle .spectrumBg {
+  opacity: 0.25;
+  filter: blur(20px);
+}
+
+.subtle .spectrumEdge {
+  opacity: 0.2;
+}
+
+@keyframes spectrumShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spectrumBg {
+    animation: none;
+  }
+}

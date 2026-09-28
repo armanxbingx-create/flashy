@@ -1,0 +1,111 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  font-weight: var(--weight-semibold);
+  border-radius: var(--radius-md);
+  transition:
+    transform var(--duration-micro) var(--ease-out),
+    opacity var(--duration-micro) var(--ease-out);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  white-space: nowrap;
+}
+
+.button:active {
+  transform: scale(0.97);
+}
+
+.button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Sizes */
+.md {
+  height: 44px;
+  padding: 0 var(--space-xl);
+  font-size: var(--text-base);
+}
+
+.sm {
+  height: 36px;
+  padding: 0 var(--space-lg);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+
+.lg {
+  height: 52px;
+  padding: 0 var(--space-3xl);
+  font-size: var(--text-md);
+  border-radius: var(--radius-lg);
+}
+
+.iconOnly {
+  width: 44px;
+  padding: 0;
+}
+
+.iconOnly.sm {
+  width: 36px;
+}
+
+.iconOnly.lg {
+  width: 52px;
+}
+
+/* Variants */
+.primary {
+  background: linear-gradient(135deg, var(--color-spectrum-purple), var(--color-spectrum-magenta));
+  color: var(--color-text);
+  box-shadow: 0 2px 12px rgba(141, 34, 255, 0.25);
+}
+
+.primary:hover {
+  box-shadow: 0 4px 20px rgba(141, 34, 255, 0.35);
+}
+
+.secondary {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  border: 1px solid var(--color-line);
+}
+
+.secondary:hover {
+  background: rgba(21, 26, 38, 0.8);
+  border-color: var(--color-line-strong);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text);
+}
+
+.danger {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--color-incorrect);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.danger:hover {
+  background: rgba(239, 68, 68, 0.18);
+}
+
+.correct {
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--color-correct);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+.correct:hover {
+  background: rgba(52, 211, 153, 0.18);
+}

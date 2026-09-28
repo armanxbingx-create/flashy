@@ -1,0 +1,108 @@
+.nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--z-nav);
+  padding: var(--space-sm) var(--space-lg);
+  padding-bottom: calc(var(--space-sm) + var(--safe-area-bottom));
+}
+
+.navInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  max-width: 420px;
+  margin: 0 auto;
+  height: var(--nav-height);
+  border-radius: var(--radius-nav);
+  background: rgba(10, 13, 22, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 -2px 20px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 0 var(--space-md);
+  will-change: transform;
+}
+
+.navItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: var(--radius-lg);
+  transition:
+    background var(--duration-normal) var(--ease-out),
+    transform var(--duration-micro) var(--ease-out);
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  min-width: 64px;
+}
+
+.navItem:active {
+  transform: scale(0.92);
+}
+
+.navItem:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.navIcon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-dim);
+  transition: color var(--duration-normal) var(--ease-out);
+}
+
+.navItemActive .navIcon {
+  color: var(--color-text);
+}
+
+.navLabel {
+  font-size: 10px;
+  font-weight: var(--weight-medium);
+  color: var(--color-text-dim);
+  letter-spacing: var(--tracking-wide);
+  transition: color var(--duration-normal) var(--ease-out);
+}
+
+.navItemActive .navLabel {
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+}
+
+/* Spectrum glow behind active icon */
+.spectrumGlow {
+  position: absolute;
+  top: 2px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(141, 34, 255, 0.35) 0%,
+    rgba(223, 18, 232, 0.2) 40%,
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-out);
+  pointer-events: none;
+  filter: blur(6px);
+}
+
+.navItemActive .spectrumGlow {
+  opacity: 1;
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .navInner {
+    background: var(--color-surface);
+  }
+}

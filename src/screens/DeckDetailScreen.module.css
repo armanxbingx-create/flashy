@@ -1,0 +1,203 @@
+.screen {
+  min-height: 100dvh;
+  padding-bottom: calc(var(--nav-height) + var(--safe-area-bottom) + var(--space-xl));
+}
+
+.deckHeader {
+  margin-bottom: var(--space-xl);
+}
+
+.deckTitle {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.content {
+  padding: var(--space-sm) var(--space-lg) 0;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Deck stats */
+.deckStats {
+  display: flex;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-xl);
+}
+
+.deckStat {
+  flex: 1;
+  padding: var(--space-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.deckStatValue {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.deckStatLabel {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  font-weight: var(--weight-medium);
+  margin-top: var(--space-xs);
+}
+
+/* Card list */
+.cardListHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-lg);
+  margin-top: var(--space-xl);
+}
+
+.cardListTitle {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+
+.cardList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.cardItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-normal) var(--ease-out),
+    transform var(--duration-micro) var(--ease-out);
+}
+
+.cardItem:active {
+  transform: scale(0.985);
+}
+
+.cardFront {
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cardBack {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cardBox {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-dim);
+  flex-shrink: 0;
+}
+
+/* Action bar */
+.actionBar {
+  display: flex;
+  gap: var(--space-md);
+  margin-top: var(--space-xl);
+}
+
+/* Menu button */
+.menuButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  transition:
+    background var(--duration-micro) var(--ease-out),
+    color var(--duration-micro) var(--ease-out);
+  flex-shrink: 0;
+}
+
+.menuButton:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text);
+}
+
+/* Danger zone */
+.dangerZone {
+  margin-top: var(--space-3xl);
+  padding-top: var(--space-xl);
+  border-top: 1px solid var(--color-line);
+  display: flex;
+  justify-content: center;
+}
+
+/* Sheet form fields */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xl);
+}
+
+.field:last-child {
+  margin-bottom: 0;
+}
+
+.fieldLabel {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-dim);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+}
+
+.fieldInput {
+  width: 100%;
+  padding: var(--space-lg);
+  background: var(--color-background);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  font-size: var(--text-md);
+  color: var(--color-text);
+  transition: border-color var(--duration-normal) var(--ease-out);
+}
+
+.fieldInput:focus {
+  border-color: var(--color-spectrum-purple);
+}
+
+.fieldInput::placeholder {
+  color: var(--color-text-dim);
+}
+
+.fieldTextarea {
+  min-height: 80px;
+  resize: vertical;
+}

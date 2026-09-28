@@ -1,0 +1,40 @@
+.screen {
+  min-height: 100dvh;
+  padding-bottom: calc(var(--nav-height) + var(--safe-area-bottom) + var(--space-xl));
+}
+
+.content {
+  padding: var(--space-sm) var(--space-lg) 0;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.deckHeader {
+  margin-bottom: var(--space-xl);
+}
+
+.deckTitle {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.summary {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: var(--space-xs);
+}
+
+.actionBar {
+  display: flex;
+  gap: var(--space-md);
+  margin-top: var(--space-2xl);
+}
+
+.hint {
+  margin-top: var(--space-xl);
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--color-text-dim);
+  line-height: var(--leading-relaxed);
+}

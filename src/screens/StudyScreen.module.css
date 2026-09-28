@@ -1,0 +1,200 @@
+.screen {
+  min-height: 100dvh;
+  padding-bottom: calc(var(--nav-height) + var(--safe-area-bottom) + var(--space-xl));
+}
+
+/* Content area */
+.content {
+  padding: var(--space-sm) var(--space-lg) 0;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Deck list */
+.deckList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.deckItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-normal) var(--ease-out),
+    transform var(--duration-micro) var(--ease-out);
+}
+
+.deckItem:active {
+  transform: scale(0.985);
+}
+
+.deckItem:hover {
+  border-color: var(--color-line-strong);
+}
+
+.deckIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-muted);
+}
+
+.deckInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.deckName {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deckMeta {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.deckDue {
+  color: var(--color-text);
+  font-weight: var(--weight-medium);
+}
+
+.deckChevron {
+  color: var(--color-text-dim);
+  flex-shrink: 0;
+}
+
+/* Primary deck card */
+.primaryDeck {
+  margin-bottom: var(--space-xl);
+}
+
+.primaryDeckCard {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  border-radius: var(--radius-lg);
+  background: rgba(7, 9, 18, 0.72);
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  transition: transform var(--duration-micro) var(--ease-out);
+}
+
+.primaryDeckCard:active {
+  transform: scale(0.985);
+}
+
+.primaryDeckIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  color: var(--color-text);
+}
+
+.primaryDeckInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.primaryDeckTitle {
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.primaryDeckMeta {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: 3px;
+}
+
+.primaryDeckDue {
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  font-weight: var(--weight-medium);
+  margin-top: 3px;
+}
+
+.primaryDeckChevron {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+/* Section headers */
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-lg);
+  margin-top: var(--space-xl);
+}
+
+.sectionTitle {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-muted);
+}
+
+/* Empty state */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5xl) var(--space-lg);
+  text-align: center;
+}
+
+.emptyIcon {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-xl);
+  color: var(--color-text-dim);
+}
+
+.emptyTitle {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  margin-bottom: var(--space-sm);
+}
+
+.emptyDesc {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  max-width: 240px;
+  line-height: var(--leading-relaxed);
+}
