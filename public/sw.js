@@ -1,72 +1,95 @@
-// Bump this string any time you ship a new build so old phones drop stale caches.
-const CACHE_NAME = 'flashy-v3'
-const SHELL_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/favicon.svg',
-  '/apple-touch-icon.png',
-  '/icon-192.png',
-  '/icon-512.png',
-]
+// Flashy service worker.
+//
+// CACHE_NAME and SHELL_ASSETS are rewritten by vite.config.ts on every
+// production build, so the precache list always matches the hashed Vite
+// output and each deploy gets its own cache bucket.
+const CACHE_NAME = 'flashy-dev'
+const SHELL_ASSETS = ['/']
+
+function openShellCache() {
+  return caches.open(CACHE_NAME)
+}
+
+function matchShell(request) {
+  return openShellCache().then((cache) => cache.match(request))
+}
+
+function saveToShell(request, response) {
+  return openShellCache().then((cache) => cache.put(request, response))
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS))
+    openShellCache()
+      .then((cache) => cache.addAll(SHELL_ASSETS))
+      .then(() => self.skipWaiting())
   )
-  self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        )
       )
-    )
+      .then(() => self.clients.claim())
   )
-  self.clients.claim()
 })
 
-self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return
+// App shell navigations are network-first so an online visit always picks up
+// the newest deployment, and fall back to the cached shell while offline.
+async function handleNavigation(event, request) {
+  try {
+    const response = await fetch(request)
+    event.waitUntil(saveToShell(request, response.clone()))
+    return response
+  } catch {
+    const cached = await matchShell(request)
+    if (cached) return cached
+    const shell = await matchShell('/index.html')
+    if (shell) return shell
+    return new Response('Flashy is unavailable offline.', {
+      status: 503,
+      headers: { 'Content-Type': 'text/plain' },
+    })
+  }
+}
 
-  const url = new URL(event.request.url)
+// Everything else same-origin is cache-first with a background refresh, so
+// hashed assets keep working offline and get replaced once a new build ships.
+async function handleAsset(event, request) {
+  const cached = await matchShell(request)
+  if (cached) {
+    event.waitUntil(
+      fetch(request)
+        .then((response) => (response && response.ok ? saveToShell(request, response) : undefined))
+        .catch(() => undefined)
+    )
+    return cached
+  }
+
+  const response = await fetch(request)
+  if (response && response.ok) {
+    event.waitUntil(saveToShell(request, response.clone()))
+  }
+  return response
+}
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event
+
+  if (request.method !== 'GET') return
+
+  const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
 
-  // Navigations (e.g. opening the PWA fresh) fall back to the cached shell
-  // when offline, so the app still boots even if this exact URL was never
-  // fetched before.
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          const clone = response.clone()
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone))
-          return response
-        })
-        .catch(() => caches.match(event.request).then((cached) => cached || caches.match('/index.html')))
-    )
+  if (request.mode === 'navigate') {
+    event.respondWith(handleNavigation(event, request))
     return
   }
 
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const fetchPromise = fetch(event.request)
-        .then((response) => {
-          if (response && response.status === 200) {
-            const clone = response.clone()
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, clone)
-            })
-          }
-          return response
-        })
-        .catch(() => cached)
-
-      return cached || fetchPromise
-    })
-  )
+  event.respondWith(handleAsset(event, request))
 })

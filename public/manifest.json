@@ -3,6 +3,7 @@
   "short_name": "Flashy",
   "description": "A personal vocabulary learning app",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#070912",
   "theme_color": "#070912",

@@ -34,7 +34,7 @@ async function bootstrap() {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <App />
-    </StrictMode>,
+    </StrictMode>
   )
 
   // Drop the static splash once React has painted its first frame.
@@ -42,4 +42,18 @@ async function bootstrap() {
   window.setTimeout(hideSplash, 1600)
 }
 
+// Offline support is a production concern only: in dev a service worker would
+// keep serving stale modules over HMR.
+function registerServiceWorker() {
+  if (!import.meta.env.PROD) return
+  if (!('serviceWorker' in navigator)) return
+  navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {})
+}
+
 bootstrap()
+
+if (document.readyState === 'complete') {
+  registerServiceWorker()
+} else {
+  window.addEventListener('load', registerServiceWorker, { once: true })
+}
