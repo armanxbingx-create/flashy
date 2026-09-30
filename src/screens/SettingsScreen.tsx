@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { ChevronRightIcon, DownloadIcon, UploadIcon } from '../components/Icons'
 import { TopBar } from '../components/TopBar'
 import { Sheet } from '../components/Sheet'
@@ -16,6 +16,179 @@ const THEMES = [
 const ALGORITHMS = [
   { value: 'five-box' as const, label: 'Five Box', description: 'Leitner-style box progression' },
 ]
+
+// ---------------------------------------------------------------------------
+// TEMPORARY — TTS Diagnostics. Read-only inspection of the WebKit
+// speechSynthesis voice list. Never calls speak/cancel/resume, never writes
+// settings, never changes TTS behavior. Remove before release.
+// ---------------------------------------------------------------------------
+interface DiagnosticVoice {
+  name: string
+  lang: string
+  voiceURI: string
+  localService: boolean
+  default: boolean
+}
+
+function readSpeechVoices(): DiagnosticVoice[] {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return []
+  try {
+    return window.speechSynthesis.getVoices().map((voice) => ({
+      name: voice.name,
+      lang: voice.lang,
+      voiceURI: voice.voiceURI,
+      localService: voice.localService,
+      default: voice.default,
+    }))
+  } catch {
+    return []
+  }
+}
+
+// Read-only mirror of the voice-selection priority in Flashcard.handleSpeak.
+// Any change to the priority there must be copied here (or vice versa).
+function selectFlashyVoice(voices: DiagnosticVoice[]): DiagnosticVoice | null {
+  return (
+    voices.find(
+      (voice) =>
+        voice.name.toLowerCase().includes('allison') &&
+        voice.lang.toLowerCase().startsWith('en'),
+    ) ??
+    voices.find((voice) => voice.lang.toLowerCase() === 'en-us') ??
+    voices.find((voice) => voice.lang.toLowerCase().startsWith('en')) ??
+    null
+  )
+}
+
+function TtsDiagnostics() {
+  const [voices, setVoices] = useState<DiagnosticVoice[]>(() => readSpeechVoices())
+
+  const refresh = useCallback(() => {
+    setVoices(readSpeechVoices())
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return
+    const synth = window.speechSynthesis
+    synth.addEventListener('voiceschanged', refresh)
+    return () => {
+      synth.removeEventListener('voiceschanged', refresh)
+    }
+  }, [refresh])
+
+  const available = typeof window !== 'undefined' && !!window.speechSynthesis
+  const selected = selectFlashyVoice(voices)
+  const allisonVoices = voices.filter((v) => v.name.toLowerCase().includes('allison'))
+  const enhancedVoices = voices.filter((v) => v.name.toLowerCase().includes('enhanced'))
+  const enUsCount = voices.filter((v) => v.lang.toLowerCase() === 'en-us').length
+  const enCount = voices.filter((v) => v.lang.toLowerCase().startsWith('en')).length
+
+  return (
+    <div className={styles.group}>
+      <div className={styles.groupTitle}>TEMPORARY — TTS Diagnostics</div>
+      <div className={styles.groupCard}>
+        <div className={`${styles.row} ${styles.rowInteractive}`} onClick={refresh}>
+          <span className={styles.rowLabel}>Refresh Voices</span>
+          <span className={styles.rowValue}>{voices.length} voices</span>
+        </div>
+        <div className={styles.row}>
+          <span className={styles.rowLabel}>speechSynthesis available</span>
+          <span className={styles.rowValue}>{available ? 'YES' : 'NO'}</span>
+        </div>
+        <div className={styles.row}>
+          <span className={styles.rowLabel}>Total voices</span>
+          <span className={styles.rowValue}>{voices.length}</span>
+        </div>
+      </div>
+
+      <div className={styles.groupTitle}>Selected Flashy voice</div>
+      <div className={styles.groupCard}>
+        {selected ? (
+          <>
+            <div className={styles.row}>
+              <span className={styles.rowLabel}>name</span>
+              <span className={styles.rowValueSmall}>{selected.name || '—'}</span>
+            </div>
+            <div className={styles.row}>
+              <span className={styles.rowLabel}>lang</span>
+              <span className={styles.rowValueSmall}>{selected.lang || '—'}</span>
+            </div>
+            <div className={styles.row}>
+              <span className={styles.rowLabel}>voiceURI</span>
+              <span className={styles.rowValueSmall}>{selected.voiceURI || '—'}</span>
+            </div>
+            <div className={styles.row}>
+              <span className={styles.rowLabel}>localService</span>
+              <span className={styles.rowValue}>{selected.localService ? 'YES' : 'NO'}</span>
+            </div>
+            <div className={styles.row}>
+              <span className={styles.rowLabel}>default</span>
+              <span className={styles.rowValue}>{selected.default ? 'YES' : 'NO'}</span>
+            </div>
+          </>
+        ) : (
+          <div className={styles.diagNote}>
+            No explicit voice selected; browser/iOS default is being used.
+          </div>
+        )}
+      </div>
+
+      <div className={styles.groupTitle}>Summary checks</div>
+      <div className={styles.groupCard}>
+        <div className={styles.row}>
+          <span className={styles.rowLabel}>Allison found</span>
+          <span className={styles.rowValue}>{allisonVoices.length > 0 ? 'YES' : 'NO'}</span>
+        </div>
+        <div className={styles.row}>
+          <span className={styles.rowLabel}>Allison voices</span>
+          <span className={styles.rowValueSmall}>
+            {allisonVoices.length > 0 ? allisonVoices.map((v) => v.name).join(', ') : '—'}
+          </span>
+        </div>
+        <div className={styles.row}>
+          <span className={styles.rowLabel}>Enhanced in name</span>
+          <span className={styles.rowValue}>{enhancedVoices.length > 0 ? 'YES' : 'NO'}</span>
+        </div>
+        <div className={styles.row}>
+          <span className={styles.rowLabel}>Enhanced voices</span>
+          <span className={styles.rowValueSmall}>
+            {enhancedVoices.length > 0 ? enhancedVoices.map((v) => v.name).join(', ') : '—'}
+          </span>
+        </div>
+        <div className={styles.row}>
+          <span className={styles.rowLabel}>en-US voice count</span>
+          <span className={styles.rowValue}>{enUsCount}</span>
+        </div>
+        <div className={styles.row}>
+          <span className={styles.rowLabel}>en-* voice count</span>
+          <span className={styles.rowValue}>{enCount}</span>
+        </div>
+      </div>
+
+      <div className={styles.groupTitle}>Complete voice list</div>
+      <div className={`${styles.groupCard} ${styles.diagScroll}`}>
+        {voices.length === 0 ? (
+          <div className={styles.diagNote}>
+            No voices returned. On iOS the list loads asynchronously — tap Refresh Voices or wait for voiceschanged.
+          </div>
+        ) : (
+          voices.map((voice, index) => (
+            <div key={`${voice.voiceURI}-${voice.name}-${index}`} className={styles.diagVoice}>
+              <div className={styles.diagVoiceName}>{voice.name || '(unnamed)'}</div>
+              <div className={styles.diagVoiceMeta}>lang: {voice.lang || '—'}</div>
+              <div className={styles.diagVoiceMeta}>voiceURI: {voice.voiceURI || '—'}</div>
+              <div className={styles.diagVoiceMeta}>
+                localService: {voice.localService ? 'YES' : 'NO'}
+                {' · '}
+                default: {voice.default ? 'YES' : 'NO'}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
 
 export function SettingsScreen() {
   const { theme, setTheme } = useTheme()
@@ -231,6 +404,9 @@ export function SettingsScreen() {
         <div className={styles.aboutText}>
           Flashy — A personal vocabulary learning instrument.
         </div>
+
+        {/* TEMPORARY — TTS Diagnostics (remove before release) */}
+        <TtsDiagnostics />
       </div>
 
       {/* Theme Picker Sheet */}
