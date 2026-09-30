@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import type { CSSProperties } from 'react'
 import styles from './Flashcard.module.css'
 import { Button } from './Button'
 import { FeedbackOverlay } from './FeedbackOverlay'
+import { settingsRepository } from '../data/repositories/settingsRepository'
 
 interface FlashcardProps {
   front: string
@@ -92,6 +93,48 @@ export function Flashcard({
     onReveal?.()
   }
 
+  // Offline American-English pronunciation via the Web Speech API.
+  // Gated on the existing Sound setting; no network, files, or dependencies.
+  const handleSpeak = useCallback(async () => {
+    try {
+      const settings = await settingsRepository.get()
+      if (!settings.soundEnabled) return
+    } catch {
+      return
+    }
+    if (typeof window === 'undefined') return
+    const synth = window.speechSynthesis
+    if (!synth || typeof SpeechSynthesisUtterance === 'undefined') return
+    const text = front.trim()
+    if (!text) return
+    try {
+      synth.cancel()
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.lang = 'en-US'
+      const voices = synth.getVoices()
+      const enUsVoice =
+        voices.find((voice) => voice.lang?.toLowerCase() === 'en-us') ??
+        voices.find((voice) => voice.lang?.toLowerCase().startsWith('en'))
+      if (enUsVoice) utterance.voice = enUsVoice
+      synth.speak(utterance)
+    } catch {
+      // Speech synthesis unavailable — stay silent.
+    }
+  }, [front])
+
+  // Stop any in-flight speech when the card unmounts (e.g. next card).
+  useEffect(() => {
+    return () => {
+      try {
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
+          window.speechSynthesis.cancel()
+        }
+      } catch {
+        // Ignore — speech cleanup is best-effort.
+      }
+    }
+  }, [])
+
   const handleCorrect = () => {
     setSwipeState('exit-right')
     setFeedback('correct')
@@ -159,7 +202,22 @@ export function Flashcard({
             </div>
 
             {/* Front */}
-            <div className={styles.word}>{front}</div>
+            <div className={styles.wordRow}>
+              <div className={styles.word}>{front}</div>
+              <button
+                type="button"
+                className={styles.speakButton}
+                onClick={handleSpeak}
+                onPointerDown={(e) => e.stopPropagation()}
+                aria-label={`Hear pronunciation of ${front}`}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M11 5 6 9H2v6h4l5 4V5z" />
+                  <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+                  <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+                </svg>
+              </button>
+            </div>
 
             {/* Back (revealed) */}
             {revealed && (

@@ -1,0 +1,551 @@
+{
+  "communities": {
+    "0": [
+      "src_data_db",
+      "src_data_db_db",
+      "src_data_db_flashydatabase",
+      "src_data_db_flashydatabase_constructor",
+      "src_data_export",
+      "src_data_export_exportdata",
+      "src_data_export_importdata",
+      "src_data_export_validateexport",
+      "src_data_id",
+      "src_data_id_newid",
+      "src_data_index",
+      "src_data_repositories_cardrepository",
+      "src_data_repositories_deckrepository",
+      "src_data_repositories_deckrepository_deckrepository",
+      "src_data_repositories_index",
+      "src_data_repositories_revieweventrepository",
+      "src_data_repositories_revieweventrepository_revieweventrepository",
+      "src_data_repositories_settingsrepository",
+      "src_data_repositories_settingsrepository_settingsrepository",
+      "src_data_seed",
+      "src_data_seed_seed_cards",
+      "src_data_seed_seed_decks",
+      "src_data_seed_seeddatabase",
+      "src_data_types",
+      "src_data_types_appexport",
+      "src_data_types_boxnumber",
+      "src_data_types_current_schema_version",
+      "src_data_types_deck",
+      "src_data_types_default_settings",
+      "src_data_types_flashcard",
+      "src_data_types_reviewevent",
+      "src_data_types_reviewresult",
+      "src_data_types_settings",
+      "src_learning_fiveboxlearningengine",
+      "src_learning_fiveboxlearningengine_fiveboxlearningengine",
+      "src_learning_fiveboxlearningengine_fiveboxlearningengine_getboxcounts",
+      "src_learning_fiveboxlearningengine_fiveboxlearningengine_getprioritybox",
+      "src_learning_fiveboxlearningengine_fiveboxlearningengine_getprogress",
+      "src_learning_fiveboxlearningengine_fiveboxlearningengine_reviewcard",
+      "src_learning_learningengine",
+      "src_learning_learningengine_learningengine",
+      "src_learning_learningengine_learningengine_getboxcounts",
+      "src_learning_learningengine_learningengine_getprioritybox",
+      "src_learning_learningengine_learningengine_getprogress",
+      "src_learning_learningengine_learningengine_reviewcard",
+      "src_screens_boxoverviewscreen_overviewdata",
+      "src_screens_deckdetailscreen_deckdata",
+      "src_screens_libraryscreen_deckwithcount",
+      "src_screens_libraryscreen_searchresults",
+      "src_screens_reviewsessionscreen_reviewsessionstate",
+      "src_screens_studyscreen_deckwithstats"
+    ],
+    "1": [
+      "ref_node_crypto",
+      "ref_node_fs",
+      "ref_node_path",
+      "ref_node_url",
+      "ref_node_zlib",
+      "ref_vite",
+      "ref_vitejs_plugin_react",
+      "scripts_generate_icons",
+      "scripts_generate_icons_base",
+      "scripts_generate_icons_boxdownsample",
+      "scripts_generate_icons_clamp",
+      "scripts_generate_icons_coverage",
+      "scripts_generate_icons_crc32",
+      "scripts_generate_icons_crc_table",
+      "scripts_generate_icons_encodepng",
+      "scripts_generate_icons_glow",
+      "scripts_generate_icons_glows",
+      "scripts_generate_icons_mark",
+      "scripts_generate_icons_mark_color",
+      "scripts_generate_icons_master",
+      "scripts_generate_icons_panel",
+      "scripts_generate_icons_pngchunk",
+      "scripts_generate_icons_rect",
+      "scripts_generate_icons_rendermaster",
+      "scripts_generate_icons_root",
+      "scripts_generate_icons_round",
+      "scripts_generate_icons_roundedrect",
+      "scripts_generate_icons_targets",
+      "vite_config",
+      "vite_config_collectshellurls",
+      "vite_config_readbundletext",
+      "vite_config_serviceworkerplugin"
+    ],
+    "2": [
+      "package",
+      "package_dependencies",
+      "package_dependencies_dexie",
+      "package_dependencies_react",
+      "package_dependencies_react_dom",
+      "package_devdependencies",
+      "package_devdependencies_oxlint",
+      "package_devdependencies_types_node",
+      "package_devdependencies_types_react",
+      "package_devdependencies_types_react_dom",
+      "package_devdependencies_typescript",
+      "package_devdependencies_vite",
+      "package_devdependencies_vitejs_plugin_react",
+      "package_name",
+      "package_private",
+      "package_scripts",
+      "package_scripts_build",
+      "package_scripts_dev",
+      "package_scripts_icons",
+      "package_scripts_lint",
+      "package_scripts_preview",
+      "package_type",
+      "package_version",
+      "ref_dexie",
+      "ref_oxlint",
+      "ref_types_node",
+      "ref_types_react",
+      "ref_types_react_dom",
+      "ref_typescript"
+    ],
+    "3": [
+      "src_components_bottomnavigation_bottomnavigation",
+      "src_components_card",
+      "src_components_card_card",
+      "src_components_card_cardprops",
+      "src_components_card_module",
+      "src_components_fiveboxcard",
+      "src_components_fiveboxcard_boxdata",
+      "src_components_fiveboxcard_fiveboxcard",
+      "src_components_fiveboxcard_fiveboxcardprops",
+      "src_components_fiveboxcard_module",
+      "src_components_flashcard_flashcard",
+      "src_components_glass",
+      "src_components_glass_glass",
+      "src_components_glass_glassprops",
+      "src_components_glass_module",
+      "src_components_spectrummaterial",
+      "src_components_spectrummaterial_module",
+      "src_components_spectrummaterial_spectrummaterial",
+      "src_components_spectrummaterial_spectrummaterialprops",
+      "src_playground_designplayground",
+      "src_playground_designplayground_designplayground",
+      "src_playground_designplayground_module",
+      "src_playground_designplayground_nav_items",
+      "src_playground_designplayground_sample_boxes"
+    ],
+    "4": [
+      "src_components_feedbackoverlay",
+      "src_components_feedbackoverlay_feedbackoverlay",
+      "src_components_feedbackoverlay_feedbackoverlayprops",
+      "src_components_feedbackoverlay_module",
+      "src_components_flashcard",
+      "src_components_flashcard_feedbacktype",
+      "src_components_flashcard_flashcardprops",
+      "src_components_flashcard_module",
+      "src_components_flashcard_swipestate",
+      "src_feedback_feedbacksystem",
+      "src_feedback_feedbacksystem_feedbacksystem",
+      "src_feedback_feedbacksystem_feedbacksystem_configure",
+      "src_feedback_feedbacksystem_feedbacksystem_error",
+      "src_feedback_feedbacksystem_feedbacksystem_getcontext",
+      "src_feedback_feedbacksystem_feedbacksystem_haptic",
+      "src_feedback_feedbacksystem_feedbacksystem_load",
+      "src_feedback_feedbacksystem_feedbacksystem_prime",
+      "src_feedback_feedbacksystem_feedbacksystem_selection",
+      "src_feedback_feedbacksystem_feedbacksystem_success",
+      "src_feedback_feedbacksystem_feedbacksystem_tone",
+      "src_feedback_feedbacksystem_toneoptions"
+    ],
+    "5": [
+      "tsconfig_app",
+      "tsconfig_app_compileroptions",
+      "tsconfig_app_compileroptions_allowarbitraryextensions",
+      "tsconfig_app_compileroptions_allowimportingtsextensions",
+      "tsconfig_app_compileroptions_erasablesyntaxonly",
+      "tsconfig_app_compileroptions_jsx",
+      "tsconfig_app_compileroptions_lib",
+      "tsconfig_app_compileroptions_module",
+      "tsconfig_app_compileroptions_moduledetection",
+      "tsconfig_app_compileroptions_moduleresolution",
+      "tsconfig_app_compileroptions_noemit",
+      "tsconfig_app_compileroptions_nofallthroughcasesinswitch",
+      "tsconfig_app_compileroptions_nounusedlocals",
+      "tsconfig_app_compileroptions_nounusedparameters",
+      "tsconfig_app_compileroptions_skiplibcheck",
+      "tsconfig_app_compileroptions_target",
+      "tsconfig_app_compileroptions_tsbuildinfofile",
+      "tsconfig_app_compileroptions_types",
+      "tsconfig_app_compileroptions_verbatimmodulesyntax",
+      "tsconfig_app_include"
+    ],
+    "6": [
+      "ref_react_dom",
+      "src_app_app",
+      "src_index",
+      "src_main",
+      "src_main_bootstrap",
+      "src_main_hidesplash",
+      "src_main_registerserviceworker",
+      "src_router_context_routercontext",
+      "src_router_routerprovider",
+      "src_router_routerprovider_gettabforscreen",
+      "src_router_routerprovider_routerprovider",
+      "src_router_routerprovider_tab_screens",
+      "src_router_types",
+      "src_router_types_routercontextvalue",
+      "src_router_types_routerstate",
+      "src_router_types_screenid",
+      "src_router_types_tabid",
+      "src_theme_themecontext_themeprovider",
+      "src_theme_themecontext_themeprovider_load"
+    ],
+    "7": [
+      "tsconfig_node",
+      "tsconfig_node_compileroptions",
+      "tsconfig_node_compileroptions_allowimportingtsextensions",
+      "tsconfig_node_compileroptions_erasablesyntaxonly",
+      "tsconfig_node_compileroptions_lib",
+      "tsconfig_node_compileroptions_module",
+      "tsconfig_node_compileroptions_moduledetection",
+      "tsconfig_node_compileroptions_noemit",
+      "tsconfig_node_compileroptions_nofallthroughcasesinswitch",
+      "tsconfig_node_compileroptions_nounusedlocals",
+      "tsconfig_node_compileroptions_nounusedparameters",
+      "tsconfig_node_compileroptions_skiplibcheck",
+      "tsconfig_node_compileroptions_target",
+      "tsconfig_node_compileroptions_tsbuildinfofile",
+      "tsconfig_node_compileroptions_types",
+      "tsconfig_node_compileroptions_verbatimmodulesyntax",
+      "tsconfig_node_include"
+    ],
+    "8": [
+      "ref_react",
+      "src_components_button",
+      "src_components_button_buttonprops",
+      "src_components_button_module",
+      "src_data_repositories_cardrepository_cardrepository",
+      "src_learning_fiveboxlearningengine_fiveboxengine",
+      "src_learning_index",
+      "src_router_context",
+      "src_screens_boxoverviewscreen",
+      "src_screens_boxoverviewscreen_boxoverviewscreen_load",
+      "src_screens_boxoverviewscreen_emptyboxes",
+      "src_screens_boxoverviewscreen_module",
+      "src_screens_reviewsessionscreen",
+      "src_screens_reviewsessionscreen_module",
+      "src_screens_studyscreen",
+      "src_screens_studyscreen_module"
+    ],
+    "9": [
+      "src_components_icons_downloadicon",
+      "src_components_icons_uploadicon",
+      "src_components_sheet",
+      "src_components_sheet_module",
+      "src_components_sheet_sheetprops",
+      "src_screens_settingsscreen",
+      "src_screens_settingsscreen_algorithms",
+      "src_screens_settingsscreen_module",
+      "src_screens_settingsscreen_settingsscreen",
+      "src_screens_settingsscreen_settingsscreen_load",
+      "src_screens_settingsscreen_themes",
+      "src_theme_themecontext",
+      "src_theme_themecontext_theme",
+      "src_theme_themecontext_themecontext",
+      "src_theme_themecontext_themecontextvalue",
+      "src_theme_themecontext_usetheme"
+    ],
+    "10": [
+      "src_app_screenrouter",
+      "src_components_button_button",
+      "src_components_topbar_topbar",
+      "src_router_context_userouter",
+      "src_screens_boxoverviewscreen_boxoverviewscreen",
+      "src_screens_cardeditorscreen",
+      "src_screens_cardeditorscreen_cardeditorscreen",
+      "src_screens_cardeditorscreen_cardeditorscreen_load",
+      "src_screens_cardeditorscreen_module",
+      "src_screens_index",
+      "src_screens_reviewsessionscreen_reviewsessionscreen",
+      "src_screens_reviewsessionscreen_reviewsessionscreen_load",
+      "src_screens_studyscreen_studyscreen",
+      "src_screens_studyscreen_studyscreen_load"
+    ],
+    "11": [
+      "src_app",
+      "src_app_nav_items",
+      "src_app_screen_to_tab",
+      "src_components_icons",
+      "src_components_icons_chevronlefticon",
+      "src_components_icons_iconprops",
+      "src_components_icons_libraryicon",
+      "src_components_icons_settingsicon",
+      "src_components_icons_studyicon",
+      "src_components_topbar",
+      "src_components_topbar_module",
+      "src_components_topbar_topbarprops"
+    ],
+    "12": [
+      "public_manifest",
+      "public_manifest_background_color",
+      "public_manifest_description",
+      "public_manifest_display",
+      "public_manifest_icons",
+      "public_manifest_name",
+      "public_manifest_orientation",
+      "public_manifest_scope",
+      "public_manifest_short_name",
+      "public_manifest_start_url",
+      "public_manifest_theme_color"
+    ],
+    "13": [
+      "src_components_confirmdialog",
+      "src_components_confirmdialog_confirmdialog",
+      "src_components_confirmdialog_confirmdialogprops",
+      "src_components_confirmdialog_module",
+      "src_screens_deckdetailscreen",
+      "src_screens_deckdetailscreen_deckdetailscreen",
+      "src_screens_deckdetailscreen_deckdetailscreen_load",
+      "src_screens_deckdetailscreen_emptyboxes",
+      "src_screens_deckdetailscreen_module"
+    ],
+    "14": [
+      "src_components_icons_chevronrighticon",
+      "src_components_icons_plusicon",
+      "src_components_icons_searchicon",
+      "src_components_sheet_sheet",
+      "src_screens_libraryscreen",
+      "src_screens_libraryscreen_libraryscreen",
+      "src_screens_libraryscreen_libraryscreen_dosearch",
+      "src_screens_libraryscreen_libraryscreen_load",
+      "src_screens_libraryscreen_module"
+    ],
+    "15": [
+      "public_sw",
+      "public_sw_handleasset",
+      "public_sw_handlenavigation",
+      "public_sw_matchshell",
+      "public_sw_openshellcache",
+      "public_sw_savetoshell",
+      "public_sw_shell_assets"
+    ],
+    "16": [
+      "oxlintrc",
+      "oxlintrc_plugins",
+      "oxlintrc_rules",
+      "oxlintrc_rules_react_only_export_components",
+      "oxlintrc_rules_react_rules_of_hooks",
+      "oxlintrc_schema"
+    ],
+    "17": [
+      "opencode_plugins_graphify",
+      "opencode_plugins_graphify_graphifyplugin",
+      "opencode_plugins_graphify_rationale_4",
+      "ref_fs",
+      "ref_path"
+    ],
+    "18": [
+      "src_tokens_index",
+      "src_tokens_index_colors",
+      "src_tokens_index_durations",
+      "src_tokens_index_gradients",
+      "src_tokens_index_radii"
+    ],
+    "19": [
+      "src_components_bottomnavigation",
+      "src_components_bottomnavigation_bottomnavigationprops",
+      "src_components_bottomnavigation_module",
+      "src_components_bottomnavigation_navitem"
+    ],
+    "20": [
+      "opencode_opencode",
+      "opencode_opencode_plugin",
+      "opencode_opencode_schema"
+    ],
+    "21": [
+      "tsconfig",
+      "tsconfig_files",
+      "tsconfig_references"
+    ]
+  },
+  "cohesion": {
+    "0": 0.11137254901960784,
+    "1": 0.07459677419354839,
+    "2": 0.06896551724137931,
+    "3": 0.11956521739130435,
+    "4": 0.14285714285714285,
+    "5": 0.1,
+    "6": 0.14619883040935672,
+    "7": 0.11764705882352941,
+    "8": 0.23333333333333334,
+    "9": 0.15833333333333333,
+    "10": 0.32967032967032966,
+    "11": 0.22727272727272727,
+    "12": 0.18181818181818182,
+    "13": 0.3055555555555556,
+    "14": 0.3333333333333333,
+    "15": 0.5714285714285714,
+    "16": 0.3333333333333333,
+    "17": 0.4,
+    "18": 0.4,
+    "19": 0.5,
+    "20": 0.6666666666666666,
+    "21": 0.6666666666666666
+  },
+  "gods": [
+    {
+      "id": "src_data_types_flashcard",
+      "label": "Flashcard",
+      "degree": 27
+    },
+    {
+      "id": "ref_react",
+      "label": "react",
+      "degree": 26
+    },
+    {
+      "id": "tsconfig_app_compileroptions",
+      "label": "compilerOptions",
+      "degree": 18
+    },
+    {
+      "id": "src_components_button_button",
+      "label": "Button()",
+      "degree": 17
+    },
+    {
+      "id": "src_components_topbar_topbar",
+      "label": "TopBar()",
+      "degree": 16
+    },
+    {
+      "id": "src_data_types_deck",
+      "label": "Deck",
+      "degree": 15
+    },
+    {
+      "id": "src_router_context_userouter",
+      "label": "useRouter()",
+      "degree": 15
+    },
+    {
+      "id": "tsconfig_node_compileroptions",
+      "label": "compilerOptions",
+      "degree": 15
+    },
+    {
+      "id": "src_feedback_feedbacksystem_feedbacksystem",
+      "label": "FeedbackSystem",
+      "degree": 13
+    },
+    {
+      "id": "src_screens_deckdetailscreen_deckdetailscreen",
+      "label": "DeckDetailScreen()",
+      "degree": 13
+    }
+  ],
+  "surprises": [
+    {
+      "source": "DeckWithCount",
+      "target": "Deck",
+      "source_files": [
+        "src/screens/LibraryScreen.tsx",
+        "src/data/types.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "inherits",
+      "why": "peripheral node `DeckWithCount` unexpectedly reaches hub `Deck`"
+    },
+    {
+      "source": "SearchResults",
+      "target": "Flashcard",
+      "source_files": [
+        "src/screens/LibraryScreen.tsx",
+        "src/data/types.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "references",
+      "why": "peripheral node `SearchResults` unexpectedly reaches hub `Flashcard`"
+    },
+    {
+      "source": "ReviewSessionState",
+      "target": "Flashcard",
+      "source_files": [
+        "src/screens/ReviewSessionScreen.tsx",
+        "src/data/types.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "references",
+      "why": "peripheral node `ReviewSessionState` unexpectedly reaches hub `Flashcard`"
+    },
+    {
+      "source": "SettingsScreen()",
+      "target": "exportData()",
+      "source_files": [
+        "src/screens/SettingsScreen.tsx",
+        "src/data/export.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "bridges separate communities"
+    },
+    {
+      "source": "SettingsScreen()",
+      "target": "importData()",
+      "source_files": [
+        "src/screens/SettingsScreen.tsx",
+        "src/data/export.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "bridges separate communities"
+    }
+  ],
+  "questions": [
+    {
+      "type": "bridge_node",
+      "question": "Why does `react` connect `react` to `package.json`, `DesignPlayground.tsx`, `FeedbackSystem`, `RouterProvider.tsx`, `SettingsScreen.tsx`, `Button`, `App.tsx`, `DeckDetailScreen.tsx`, `LibraryScreen.tsx`, `BottomNavigation.tsx`?",
+      "why": "High betweenness centrality (0.255) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `vite` connect `generate-icons.mjs` to `package.json`?",
+      "why": "High betweenness centrality (0.061) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `@vitejs/plugin-react` connect `generate-icons.mjs` to `package.json`?",
+      "why": "High betweenness centrality (0.061) - this node is a cross-community bridge."
+    },
+    {
+      "type": "isolated_nodes",
+      "question": "What connects `IconProps`, `TopBarProps`, `ConfirmDialogProps` to the rest of the system?",
+      "why": "117 weakly-connected nodes found - possible documentation gaps or missing edges."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `data/index.ts` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.11137254901960784 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `generate-icons.mjs` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.07459677419354839 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `package.json` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.06896551724137931 - nodes in this community are weakly interconnected."
+    }
+  ]
+}
