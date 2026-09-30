@@ -126,10 +126,15 @@ export function Flashcard({
       const utterance = new SpeechSynthesisUtterance(text)
       utterance.lang = 'en-US'
       const voices = synth.getVoices()
-      const enUsVoice =
+      const preferredVoice =
+        voices.find(
+          (voice) =>
+            voice.name?.toLowerCase().includes('allison') &&
+            voice.lang?.toLowerCase().startsWith('en'),
+        ) ??
         voices.find((voice) => voice.lang?.toLowerCase() === 'en-us') ??
         voices.find((voice) => voice.lang?.toLowerCase().startsWith('en'))
-      if (enUsVoice) utterance.voice = enUsVoice
+      if (preferredVoice) utterance.voice = preferredVoice
       synth.speak(utterance)
     } catch {
       // Speech synthesis unavailable — stay silent.
