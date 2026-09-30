@@ -38,6 +38,21 @@ export function Flashcard({
   const cardRef = useRef<HTMLDivElement>(null)
   const startX = useRef(0)
   const isDragging = useRef(false)
+  // Cached outside the tap handler so the tap-to-speak path stays fully
+  // synchronous (iOS silently drops speak() outside a user gesture).
+  // Refreshed on every mount — ReviewSessionScreen keys Flashcard by card id,
+  // so the value is at most one card old, and leaving to Settings unmounts.
+  const soundEnabledRef = useRef(false)
+
+  useEffect(() => {
+    let cancelled = false
+    settingsRepository.get()
+      .then((settings) => {
+        if (!cancelled) soundEnabledRef.current = settings.soundEnabled
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (swipeState !== 'idle' && swipeState !== 'enter') return
@@ -94,14 +109,11 @@ export function Flashcard({
   }
 
   // Offline American-English pronunciation via the Web Speech API.
-  // Gated on the existing Sound setting; no network, files, or dependencies.
-  const handleSpeak = useCallback(async () => {
-    try {
-      const settings = await settingsRepository.get()
-      if (!settings.soundEnabled) return
-    } catch {
-      return
-    }
+  // Gated on the existing Sound setting (cached ref — no IndexedDB read here,
+  // so speak() runs synchronously inside the tap gesture). No network, files,
+  // or dependencies.
+  const handleSpeak = useCallback(() => {
+    if (!soundEnabledRef.current) return
     if (typeof window === 'undefined') return
     const synth = window.speechSynthesis
     if (!synth || typeof SpeechSynthesisUtterance === 'undefined') return
@@ -109,6 +121,8 @@ export function Flashcard({
     if (!text) return
     try {
       synth.cancel()
+      // Recover from a paused/stuck speech queue on iOS.
+      if (typeof synth.resume === 'function') synth.resume()
       const utterance = new SpeechSynthesisUtterance(text)
       utterance.lang = 'en-US'
       const voices = synth.getVoices()
