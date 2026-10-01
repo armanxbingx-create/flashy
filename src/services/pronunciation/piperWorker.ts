@@ -101,72 +101,30 @@ async function readCachedFile(name: string): Promise<File | undefined> {
   }
 }
 
-/** Pre-seed OPFS from the configurable manifest URL (R2 later, HF for now). */
-async function seedFileFromManifest(
-  name: string,
-  url: string,
-  expectedBytes: number | undefined,
-  onProgress: (loaded: number, total: number) => void,
-): Promise<void> {
-  const cached = await readCachedFile(name)
-  if (cached && cached.size > 0) {
-    if (expectedBytes === undefined || cached.size === expectedBytes) return
-    // Size mismatch (e.g. partial download) — re-download below.
+/**
+ * Verify the main-thread-downloaded assets are present in OPFS.
+ * The worker NEVER fetches model/config itself (iOS Safari workers reject
+ * cross-origin fetch with `TypeError: Load failed` on the target device).
+ * The main thread downloads (see piperAssetStore.ts); the worker only reads.
+ * The Piper library then finds the same filenames via its own OPFS lookup
+ * and performs zero network fetches for model/config.
+ */
+async function verifyCachedAssets(): Promise<void> {
+  const config = await readCachedFile(PIPER_CONFIG_FILE)
+  if (!config || config.size <= 0) {
+    diag('worker:asset-check', `MISS config ${PIPER_CONFIG_FILE} — main thread must download first`)
+    throw new Error('ASSETS_MISSING: config not in OPFS')
   }
-  // Retry transient network failures: iOS Safari workers often throw a bare
-  // `TypeError: Load failed` on the first fetch attempt (DNS/QUIC race in a
-  // freshly spawned worker, radio handoff, …). Only fully-assembled blobs
-  // are written to OPFS, so a failed attempt never leaves partial files.
-  const kind = name.endsWith('.onnx') ? 'model' : 'config'
-  const maxAttempts = 4
-  let lastError: unknown = null
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const response = await fetch(url)
-      if (!response.ok || !response.body) {
-        // Retry rate-limiting and server errors; other 4xx are permanent.
-        if (response.status === 429 || response.status >= 500) {
-          throw new Error(`Model download failed: HTTP ${response.status} (retryable)`)
-        }
-        throw new Error(`Model download failed: HTTP ${response.status}`)
-      }
-      const total = Number(response.headers.get('Content-Length') ?? 0) || expectedBytes || 0
-      const reader = response.body.getReader()
-      const chunks: Uint8Array[] = []
-      let loaded = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    if (value) {
-      chunks.push(value)
-      loaded += value.length
-      onProgress(loaded, total)
-    }
+  diag('worker:asset-check', `HIT config ${PIPER_CONFIG_FILE} (${config.size} bytes)`)
+  const model = await readCachedFile(PIPER_MODEL_FILE)
+  if (!model || model.size !== PIPER_EXPECTED_MODEL_BYTES) {
+    diag(
+      'worker:asset-check',
+      `MISS model ${PIPER_MODEL_FILE} (got ${model?.size ?? -1}, expected ${PIPER_EXPECTED_MODEL_BYTES})`,
+    )
+    throw new Error('ASSETS_MISSING: model not in OPFS')
   }
-      const blob = new Blob(chunks as BlobPart[], { type: 'application/octet-stream' })
-      if (expectedBytes !== undefined && blob.size !== expectedBytes) {
-        throw new Error(`Model size mismatch: got ${blob.size}, expected ${expectedBytes}`)
-      }
-      const root = await navigator.storage.getDirectory()
-      const dir = await root.getDirectoryHandle('piper', { create: true })
-      const handle = await dir.getFileHandle(name, { create: true })
-      const writable = await handle.createWritable()
-      await writable.write(blob)
-      await writable.close()
-      return
-    } catch (error) {
-      lastError = error
-      const message = error instanceof Error ? error.message : String(error)
-      const permanentHttp =
-        message.startsWith('Model download failed: HTTP') && !message.includes('(retryable)')
-      if (permanentHttp || attempt === maxAttempts) {
-        throw error
-      }
-      diag(`worker:${kind}-fetch-retry`, `attempt ${attempt}/${maxAttempts} failed: ${message}`)
-      await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** (attempt - 1)))
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error(String(lastError))
+  diag('worker:asset-check', `HIT model ${PIPER_MODEL_FILE} (${model.size} bytes)`)
 }
 
 async function ensureSession(): Promise<void> {
@@ -208,38 +166,12 @@ async function ensureSession(): Promise<void> {
       throw error
     }
 
-    // Seed model + config from manifest URLs. The library caches OPFS
-    // entries keyed by filename, so these seeds satisfy its own lookup
-    // and it will not re-download from its built-in mirror.
-    diag('worker:config-fetch-start', PIPER_CONFIG_URL)
+    // The library reads the same filenames from OPFS (see piperAssetStore.ts),
+    // so with main-thread-seeded files it performs no network fetches itself.
     try {
-      await seedFileFromManifest(
-        PIPER_CONFIG_FILE,
-        PIPER_CONFIG_URL,
-        undefined,
-        () => {},
-      )
-      const cachedConfig = await readCachedFile(PIPER_CONFIG_FILE)
-      diag('worker:config-fetch-complete', `${cachedConfig?.size ?? -1} bytes`)
+      await verifyCachedAssets()
     } catch (error) {
-      diag('worker:config-fetch-failed', describeWorkerError(error))
-      throw error
-    }
-    diag('worker:model-fetch-start', PIPER_MODEL_URL)
-    try {
-      await seedFileFromManifest(
-        PIPER_MODEL_FILE,
-        PIPER_MODEL_URL,
-        PIPER_EXPECTED_MODEL_BYTES,
-        (loaded, total) => post({ type: 'progress', loaded, total }),
-      )
-      const cachedModel = await readCachedFile(PIPER_MODEL_FILE)
-      diag(
-        'worker:model-fetch-complete',
-        `${cachedModel?.size ?? -1} bytes (expected ${PIPER_EXPECTED_MODEL_BYTES})`,
-      )
-    } catch (error) {
-      diag('worker:model-fetch-failed', describeWorkerError(error))
+      diag('worker:asset-verify-failed', describeWorkerError(error))
       throw error
     }
 

@@ -2,6 +2,9 @@
  * PiperProvider — main-thread owner of the Piper Web Worker + WAV playback.
  *
  * - Lazy: no Worker, no download, no ONNX session until first `speak()`.
+ * - The MAIN thread downloads config/model into OPFS (see piperAssetStore);
+ *   the worker only reads already-cached OPFS files and never fetches,
+ *   because `fetch()` fails inside iOS Safari workers on the target device.
  * - OPFS persistence with feature detection; Dexie schema untouched.
  * - One synthesis job at a time; a new request cancels/replaces the old.
  * - WAV playback via a dedicated HTMLAudioElement + Blob URL.
@@ -10,15 +13,16 @@
  */
 
 import {
-  PIPER_MODEL_VERSION,
-  PIPER_VERSION_STORAGE_KEY,
-} from './piperManifest'
+  ensurePiperAssets,
+  piperOpfsSupported,
+} from './piperAssetStore'
 import type { PronunciationProgress } from './PronunciationProvider'
 // TEMPORARY diagnostics (remove with piperDiagnostics.ts).
-import {
-  logPiperDiag,
-  setPiperDownloadProgress,
-} from './piperDiagnostics'
+import { logPiperDiag } from './piperDiagnostics'
+
+// Re-exported so existing importers keep working (implementation moved to
+// piperAssetStore.ts alongside the download logic).
+export { piperOpfsSupported } from './piperAssetStore'
 
 type WorkerOutgoing =
   | { type: 'ready' }
@@ -41,60 +45,6 @@ type WorkerIncoming =
   // TEMPORARY GitHub fetch probe (remove with piperDiagnostics.ts).
   | { type: 'fetch-test-github' }
 
-export function piperOpfsSupported(): boolean {
-  try {
-    return (
-      typeof navigator !== 'undefined' &&
-      !!navigator.storage &&
-      typeof (navigator.storage as unknown as { getDirectory?: unknown }).getDirectory ===
-        'function'
-    )
-  } catch {
-    return false
-  }
-}
-
-function readStoredVersion(): string | null {
-  try {
-    return window.localStorage.getItem(PIPER_VERSION_STORAGE_KEY)
-  } catch {
-    return null
-  }
-}
-
-function writeStoredVersion(version: string): void {
-  try {
-    window.localStorage.setItem(PIPER_VERSION_STORAGE_KEY, version)
-  } catch {
-    // Private mode etc. — model still cached in OPFS for the session.
-  }
-}
-
-/** Remove a stale OPFS model copy when the manifest version changes. */
-async function evictStaleModel(): Promise<void> {
-  try {
-    if (readStoredVersion() === PIPER_MODEL_VERSION) return
-    const root = await navigator.storage.getDirectory()
-    // `removeEntry` is the broadly-typed DOM API; newer specs call it `remove`.
-    const removable = root as unknown as {
-      removeEntry?: (name: string, options?: { recursive?: boolean }) => Promise<void>
-      remove?: (options?: { recursive?: boolean }) => Promise<void>
-    }
-    if (typeof removable.removeEntry === 'function') {
-      await removable.removeEntry('piper', { recursive: true })
-    } else if (typeof removable.remove === 'function') {
-      const dir = await root.getDirectoryHandle('piper')
-      const dirRemovable = dir as unknown as {
-        remove?: (options?: { recursive?: boolean }) => Promise<void>
-      }
-      await dirRemovable.remove?.({ recursive: true })
-    }
-  } catch {
-    // Missing directory or unsupported — worker will report accurately.
-  }
-  writeStoredVersion(PIPER_MODEL_VERSION)
-}
-
 export class PiperProvider {
   private worker: Worker | null = null
   private nextId = 1
@@ -116,10 +66,20 @@ export class PiperProvider {
     return this.ready
   }
 
-  /** Warm the runtime + model in the background (still lazy, never at boot). */
+  /** Warm the runtime + model in the background (still lazy, never at boot).
+   *
+   * Order matters for iOS: the main thread downloads assets into OPFS
+   * FIRST (worker fetch is broken on the target device), then the worker
+   * initializes its session from the cached files. On asset failure the
+   * start flag resets so the next tap retries instead of stalling forever.
+   */
   warmUp(onProgress?: (progress: PronunciationProgress) => void): void {
-    if (this.disposed || this.initStarted) {
-      logPiperDiag('main', 'main:warmup-skipped', 'disposed or already started')
+    if (this.disposed) {
+      logPiperDiag('main', 'main:warmup-skipped', 'disposed')
+      return
+    }
+    if (this.initStarted) {
+      logPiperDiag('main', 'main:warmup-skipped', 'already started')
       return
     }
     if (!piperOpfsSupported()) {
@@ -128,18 +88,25 @@ export class PiperProvider {
     }
     this.initStarted = true
     logPiperDiag('main', 'main:warmup-called')
-    void evictStaleModel()
-      .catch(() => {})
-      .then(() => this.ensureWorker())
-      .then((worker) => {
+    const forwardProgress = onProgress
+      ? (loaded: number, total: number) => {
+          const fraction = total > 0 ? Math.min(1, loaded / total) : undefined
+          onProgress({ fraction, loaded, total })
+        }
+      : undefined
+    void ensurePiperAssets(forwardProgress)
+      .then(() => {
+        const worker = this.ensureWorker()
         logPiperDiag('main', 'main:init-posted')
         worker.postMessage({ type: 'init' } satisfies WorkerIncoming)
-        if (onProgress) {
-          // Track the next synthesize progress via a throwaway hook.
-          this.progressHook = onProgress
-        }
       })
-      .catch(() => {})
+      .catch((error: unknown) => {
+        // TEMPORARY: surface the real failure; reset so later taps retry
+        // instead of stalling on Web Speech forever.
+        const message = error instanceof Error ? error.message : String(error)
+        logPiperDiag('main', 'main:warmup-failed', message)
+        this.initStarted = false
+      })
   }
 
   private progressHook: ((progress: PronunciationProgress) => void) | null = null
@@ -185,6 +152,9 @@ export class PiperProvider {
         return
       }
       if (message.type === 'progress') {
+        // Worker-side progress (e.g. library-internal fetches). Download
+        // snapshot/milestones are driven by piperAssetStore on the main
+        // thread; here we only forward to live hooks.
         const fraction =
           message.total > 0 ? Math.min(1, message.loaded / message.total) : undefined
         const progress: PronunciationProgress = {
@@ -192,14 +162,6 @@ export class PiperProvider {
           loaded: message.loaded,
           total: message.total,
         }
-        // TEMPORARY: snapshot for Settings + milestone log lines.
-        setPiperDownloadProgress({
-          started: true,
-          loaded: message.loaded,
-          total: message.total,
-          done: false,
-        })
-        this.logDownloadMilestone(message.loaded, message.total)
         this.progressHook?.(progress)
         for (const entry of this.pending.values()) entry.onProgress?.(progress)
         return
@@ -246,35 +208,6 @@ export class PiperProvider {
     return worker
   }
 
-  // TEMPORARY download-milestone logging (remove with piperDiagnostics.ts).
-  private lastMilestone = -1
-
-  private logDownloadMilestone(loaded: number, total: number): void {
-    if (total <= 0) {
-      if (this.lastMilestone !== 0) {
-        this.lastMilestone = 0
-        logPiperDiag('main', 'main:download-progress', `${loaded} bytes (total unknown)`)
-      }
-      return
-    }
-    if (loaded < this.lastMilestoneLoaded) {
-      // New download (restart) — reset milestones.
-      this.lastMilestone = -1
-    }
-    this.lastMilestoneLoaded = loaded
-    const pct = Math.floor((loaded / total) * 100)
-    const milestone = pct >= 100 ? 100 : Math.floor(pct / 25) * 25
-    if (milestone > this.lastMilestone) {
-      this.lastMilestone = milestone
-      logPiperDiag('main', 'main:download-progress', `${pct}% (${loaded}/${total} bytes)`)
-      if (milestone >= 100) {
-        setPiperDownloadProgress({ started: true, loaded, total, done: true })
-      }
-    }
-  }
-
-  private lastMilestoneLoaded = 0
-
   /**
    * Synthesize text to a WAV ArrayBuffer. Rejects on any failure
    * (unsupported OPFS, download error, inference error) so the caller
@@ -299,23 +232,29 @@ export class PiperProvider {
       }
     }
     this.stopAudio()
-    if (!this.initStarted) {
-      this.initStarted = true
-      // Fire-and-forget version eviction; worker pre-seed validates size.
-      void evictStaleModel().catch(() => {})
-    }
-    const worker = this.ensureWorker()
-    const id = this.nextId++
-    const promise = new Promise<ArrayBuffer>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject, onProgress })
-    })
-    try {
-      worker.postMessage({ type: 'synthesize', id, text: trimmed } satisfies WorkerIncoming)
-    } catch (error) {
-      this.pending.delete(id)
-      return Promise.reject(error instanceof Error ? error : new Error(String(error)))
-    }
-    return promise
+    // Main thread owns the assets (worker fetch is broken on iOS): ensure
+    // OPFS has them before asking the worker to synthesize. Cache hits
+    // resolve immediately; failures reject so the caller falls back.
+    const forwardProgress = onProgress
+      ? (loaded: number, total: number) => {
+          const fraction = total > 0 ? Math.min(1, loaded / total) : undefined
+          onProgress({ fraction, loaded, total })
+        }
+      : undefined
+    return ensurePiperAssets(forwardProgress).then(
+      () =>
+        new Promise<ArrayBuffer>((resolve, reject) => {
+          const worker = this.ensureWorker()
+          const id = this.nextId++
+          this.pending.set(id, { resolve, reject, onProgress })
+          try {
+            worker.postMessage({ type: 'synthesize', id, text: trimmed } satisfies WorkerIncoming)
+          } catch (error) {
+            this.pending.delete(id)
+            reject(error instanceof Error ? error : new Error(String(error)))
+          }
+        }),
+    )
   }
 
   /**

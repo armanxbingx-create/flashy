@@ -65,13 +65,15 @@ class CompositePronunciationService implements PronunciationProvider {
       } else {
         // Cold path: kick off lazy download/init in the background, but
         // speak with Web Speech NOW so this tap still produces audio.
+        // warmUp() is safe to call on every tap: the provider runs it once
+        // at a time and resets on failure so later taps retry.
         if (!this.warmUpStarted) {
           this.warmUpStarted = true
           logPiperDiag('main', 'main:cold-path-warmup-started')
-          piper.warmUp(options?.onProgress)
         } else {
           logPiperDiag('main', 'main:cold-path-warmup-already-started')
         }
+        piper.warmUp(options?.onProgress)
       }
     } else {
       // TEMPORARY: record exactly why Piper was skipped.
