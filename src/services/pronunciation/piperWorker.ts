@@ -37,6 +37,8 @@ type OutgoingMessage =
   | { type: 'progress'; loaded: number; total: number }
   | { type: 'result'; id: number; wav: ArrayBuffer }
   | { type: 'error'; id: number | null; message: string }
+  // TEMPORARY diagnostic event (remove with piperDiagnostics.ts).
+  | { type: 'diag'; event: string; detail?: string; at: number }
 
 const ctx = self as unknown as {
   postMessage(message: OutgoingMessage, transfer?: Transferable[]): void
@@ -52,6 +54,20 @@ let sessionPromise: Promise<void> | null = null
 
 function post(message: OutgoingMessage, transfer?: Transferable[]): void {
   ctx.postMessage(message, transfer)
+}
+
+// TEMPORARY diagnostic emitter (remove with piperDiagnostics.ts).
+function diag(event: string, detail?: string): void {
+  post({ type: 'diag', event, detail, at: Date.now() })
+}
+
+function describeWorkerError(error: unknown): string {
+  if (error instanceof Error) {
+    const stackFirst = error.stack?.split('\n').slice(0, 3).join(' | ')
+    const message = stackFirst && stackFirst.length < 500 ? stackFirst : error.message
+    return `${error.name || 'Error'}: ${message || String(error)}`
+  }
+  return `Unknown: ${String(error)}`
 }
 
 function opfsSupported(): boolean {
@@ -124,42 +140,81 @@ async function ensureSession(): Promise<void> {
   if (sessionPromise) return sessionPromise
   sessionPromise = (async () => {
     if (!opfsSupported()) {
+      diag('worker:opfs-check', 'FAIL: navigator.storage.getDirectory missing')
       throw new Error('OPFS_UNSUPPORTED')
     }
+    diag('worker:opfs-check', 'ok')
     // Single-thread WASM: no SharedArrayBuffer, no COOP/COEP. On a
     // non-crossOriginIsolated page ORT forces this anyway; set it
     // explicitly so desktop dev matches iPhone behavior.
-    const ort = await import('onnxruntime-web')
-    const ortEnv = (ort.default ?? ort).env
-    if (ortEnv?.wasm) {
-      ortEnv.wasm.numThreads = 1
+    diag('worker:ort-import-start')
+    let ortEnv: { wasm?: { numThreads?: number } } | undefined
+    try {
+      const ort = await import('onnxruntime-web')
+      ortEnv = (ort.default ?? ort).env
+      if (ortEnv?.wasm) {
+        ortEnv.wasm.numThreads = 1
+      }
+      diag('worker:ort-import-complete')
+    } catch (error) {
+      diag('worker:ort-import-failed', describeWorkerError(error))
+      throw error
     }
-    const lib = await import('@realtimex/piper-tts-web')
-    TtsSessionClass = lib.TtsSession
+    diag('worker:lib-import-start')
+    try {
+      const lib = await import('@realtimex/piper-tts-web')
+      TtsSessionClass = lib.TtsSession
+      diag('worker:lib-import-complete')
+    } catch (error) {
+      diag('worker:lib-import-failed', describeWorkerError(error))
+      throw error
+    }
 
     // Seed model + config from manifest URLs. The library caches OPFS
     // entries keyed by filename, so these seeds satisfy its own lookup
     // and it will not re-download from its built-in mirror.
-    await seedFileFromManifest(
-      PIPER_CONFIG_FILE,
-      PIPER_CONFIG_URL,
-      undefined,
-      () => {},
-    )
-    await seedFileFromManifest(
-      PIPER_MODEL_FILE,
-      PIPER_MODEL_URL,
-      PIPER_EXPECTED_MODEL_BYTES,
-      (loaded, total) => post({ type: 'progress', loaded, total }),
-    )
+    diag('worker:config-fetch-start', PIPER_CONFIG_URL)
+    try {
+      await seedFileFromManifest(
+        PIPER_CONFIG_FILE,
+        PIPER_CONFIG_URL,
+        undefined,
+        () => {},
+      )
+      const cachedConfig = await readCachedFile(PIPER_CONFIG_FILE)
+      diag('worker:config-fetch-complete', `${cachedConfig?.size ?? -1} bytes`)
+    } catch (error) {
+      diag('worker:config-fetch-failed', describeWorkerError(error))
+      throw error
+    }
+    diag('worker:model-fetch-start', PIPER_MODEL_URL)
+    try {
+      await seedFileFromManifest(
+        PIPER_MODEL_FILE,
+        PIPER_MODEL_URL,
+        PIPER_EXPECTED_MODEL_BYTES,
+        (loaded, total) => post({ type: 'progress', loaded, total }),
+      )
+      const cachedModel = await readCachedFile(PIPER_MODEL_FILE)
+      diag(
+        'worker:model-fetch-complete',
+        `${cachedModel?.size ?? -1} bytes (expected ${PIPER_EXPECTED_MODEL_BYTES})`,
+      )
+    } catch (error) {
+      diag('worker:model-fetch-failed', describeWorkerError(error))
+      throw error
+    }
 
+    diag('worker:tts-session-construct-start', PIPER_VOICE_ID)
     const ttsSession = new TtsSessionClass({
       voiceId: PIPER_VOICE_ID,
       progress: (progress: { loaded: number; total: number }) => {
         post({ type: 'progress', loaded: progress.loaded, total: progress.total })
       },
     })
+    diag('worker:waitready-start')
     await ttsSession.waitReady
+    diag('worker:waitready-complete')
     // TtsSession.init resets numThreads to hardwareConcurrency; force
     // single-thread back (ORT also self-forces 1 when the page is not
     // crossOriginIsolated, which a PWA never is — this keeps dev matching).
@@ -174,6 +229,8 @@ async function ensureSession(): Promise<void> {
   try {
     await sessionPromise
   } catch (error) {
+    const message = describeWorkerError(error)
+    diag('worker:ensure-session-failed', message)
     sessionFailed = error instanceof Error ? error.message : String(error)
     sessionPromise = null
     throw error
@@ -193,8 +250,12 @@ function currentSession(): {
 ctx.onmessage = (event: MessageEvent<IncomingMessage>) => {
   const message = event.data
   if (message.type === 'init') {
+    diag('worker:init-received')
     void ensureSession().then(
-      () => post({ type: 'ready' }),
+      () => {
+        diag('worker:ready-posted')
+        post({ type: 'ready' })
+      },
       (error: unknown) =>
         post({
           type: 'error',

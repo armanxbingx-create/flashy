@@ -1,10 +1,30 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useSyncExternalStore } from 'react'
 import { ChevronRightIcon, DownloadIcon, UploadIcon } from '../components/Icons'
 import { TopBar } from '../components/TopBar'
 import { Sheet } from '../components/Sheet'
 import { useTheme } from '../theme/ThemeContext'
 import { settingsRepository, exportData, importData, cardRepository, reviewEventRepository, deckRepository } from '../data'
 import { feedbackSystem } from '../feedback/FeedbackSystem'
+import {
+  PIPER_CONFIG_URL,
+  PIPER_EXPECTED_MODEL_BYTES,
+  PIPER_MODEL_URL,
+  PIPER_MODEL_VERSION,
+  PIPER_VOICE_ID,
+} from '../services/pronunciation/piperManifest'
+import {
+  clearPiperDiag,
+  getPiperDiagEvents,
+  getPiperDiagVersion,
+  getPiperDownloadProgress,
+  probeOpfs,
+  subscribePiperDiag,
+  type OpfsProbeResult,
+} from '../services/pronunciation/piperDiagnostics'
+import {
+  diagnosePiperWarmUp,
+  getPronunciationService,
+} from '../services/pronunciation/pronunciationService'
 import styles from './SettingsScreen.module.css'
 
 const THEMES = [
@@ -182,6 +202,176 @@ function TtsDiagnostics() {
                 {' · '}
                 default: {voice.default ? 'YES' : 'NO'}
               </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// TEMPORARY — Piper diagnostics (remove with piperDiagnostics.ts).
+// Read-only observability for why Piper never becomes ready on iPhone.
+// Never speaks, never changes fallback behavior; warm-up here is the same
+// lazy init the first speaker tap would start, without audio.
+// ---------------------------------------------------------------------------
+function PiperDiagnostics() {
+  // Re-render live whenever the diag store changes.
+  useSyncExternalStore(subscribePiperDiag, getPiperDiagVersion)
+  const [probe, setProbe] = useState<OpfsProbeResult | null>(null)
+  const [probing, setProbing] = useState(false)
+
+  const events = getPiperDiagEvents()
+  const download = getPiperDownloadProgress()
+  const piperReady = getPronunciationService().piperReady
+  const pct =
+    download.total > 0 ? Math.round((download.loaded / download.total) * 100) : null
+
+  const handleProbe = useCallback(() => {
+    setProbing(true)
+    void probeOpfs()
+      .then((result) => setProbe(result))
+      .catch(() =>
+        setProbe({
+          storageExists: false,
+          getDirectoryExists: false,
+          getDirectoryOk: false,
+          errorName: 'ProbeFailed',
+          errorMessage: 'probeOpfs() threw',
+        }),
+      )
+      .finally(() => setProbing(false))
+  }, [])
+
+  const handleWarmUp = useCallback(() => {
+    diagnosePiperWarmUp()
+  }, [])
+
+  const handleClear = useCallback(() => {
+    clearPiperDiag()
+  }, [])
+
+  return (
+    <div className={styles.group}>
+      <div className={styles.groupTitle}>TEMPORARY — Piper Diagnostics</div>
+
+      <div className={styles.groupCard}>
+        <div className={styles.row}>
+          <span className={styles.rowLabel}>voice ID</span>
+          <span className={styles.rowValueSmall}>{PIPER_VOICE_ID}</span>
+        </div>
+        <div className={styles.row}>
+          <span className={styles.rowLabel}>model version</span>
+          <span className={styles.rowValueSmall}>{PIPER_MODEL_VERSION}</span>
+        </div>
+        <div className={styles.row}>
+          <span className={styles.rowLabel}>expected bytes</span>
+          <span className={styles.rowValue}>{PIPER_EXPECTED_MODEL_BYTES}</span>
+        </div>
+        <div className={styles.row}>
+          <span className={styles.rowLabel}>piper ready</span>
+          <span className={styles.rowValue}>{piperReady ? 'YES' : 'NO'}</span>
+        </div>
+      </div>
+
+      <div className={styles.groupTitle}>Runtime URLs (public model files)</div>
+      <div className={`${styles.groupCard} ${styles.diagScroll}`}>
+        <div className={styles.diagVoice}>
+          <div className={styles.diagVoiceName}>model URL</div>
+          <div className={styles.diagVoiceMeta}>{PIPER_MODEL_URL}</div>
+        </div>
+        <div className={styles.diagVoice}>
+          <div className={styles.diagVoiceName}>config URL</div>
+          <div className={styles.diagVoiceMeta}>{PIPER_CONFIG_URL}</div>
+        </div>
+      </div>
+
+      <div className={styles.groupTitle}>OPFS probe</div>
+      <div className={styles.groupCard}>
+        <div className={`${styles.row} ${styles.rowInteractive}`} onClick={handleProbe}>
+          <span className={styles.rowLabel}>{probing ? 'Probing…' : 'Probe OPFS now'}</span>
+          <span className={styles.rowValue}>{probe ? 'done' : 'tap'}</span>
+        </div>
+        {probe && (
+          <>
+            <div className={styles.row}>
+              <span className={styles.rowLabel}>navigator.storage</span>
+              <span className={styles.rowValue}>{probe.storageExists ? 'YES' : 'NO'}</span>
+            </div>
+            <div className={styles.row}>
+              <span className={styles.rowLabel}>getDirectory fn</span>
+              <span className={styles.rowValue}>{probe.getDirectoryExists ? 'YES' : 'NO'}</span>
+            </div>
+            <div className={styles.row}>
+              <span className={styles.rowLabel}>getDirectory() call</span>
+              <span className={styles.rowValue}>
+                {probe.getDirectoryOk === null
+                  ? 'NOT ATTEMPTED'
+                  : probe.getDirectoryOk
+                    ? 'OK'
+                    : 'FAILED'}
+              </span>
+            </div>
+            {probe.errorName && (
+              <div className={styles.row}>
+                <span className={styles.rowLabel}>error name</span>
+                <span className={styles.rowValueSmall}>{probe.errorName}</span>
+              </div>
+            )}
+            {probe.errorMessage && (
+              <div className={styles.row}>
+                <span className={styles.rowLabel}>error message</span>
+                <span className={styles.rowValueSmall}>{probe.errorMessage}</span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className={styles.groupTitle}>Download progress</div>
+      <div className={styles.groupCard}>
+        <div className={styles.row}>
+          <span className={styles.rowLabel}>started</span>
+          <span className={styles.rowValue}>{download.started ? 'YES' : 'NO'}</span>
+        </div>
+        <div className={styles.row}>
+          <span className={styles.rowLabel}>bytes</span>
+          <span className={styles.rowValueSmall}>
+            {download.loaded}/{download.total || '—'}
+            {pct !== null ? ` (${pct}%)` : ''}
+          </span>
+        </div>
+        <div className={styles.row}>
+          <span className={styles.rowLabel}>complete</span>
+          <span className={styles.rowValue}>{download.done ? 'YES' : 'NO'}</span>
+        </div>
+      </div>
+
+      <div className={styles.groupTitle}>Actions</div>
+      <div className={styles.groupCard}>
+        <div className={`${styles.row} ${styles.rowInteractive}`} onClick={handleWarmUp}>
+          <span className={styles.rowLabel}>Start Piper warm-up (no audio)</span>
+        </div>
+        <div className={`${styles.row} ${styles.rowInteractive}`} onClick={handleClear}>
+          <span className={styles.rowLabel}>Clear event log</span>
+          <span className={styles.rowValue}>{events.length}</span>
+        </div>
+      </div>
+
+      <div className={styles.groupTitle}>Event log (newest first)</div>
+      <div className={`${styles.groupCard} ${styles.diagScroll}`}>
+        {events.length === 0 ? (
+          <div className={styles.diagNote}>
+            No Piper events yet. Tap a speaker button or start warm-up above, then wait.
+          </div>
+        ) : (
+          events.map((entry) => (
+            <div key={entry.seq} className={styles.diagVoice}>
+              <div className={styles.diagVoiceName}>
+                #{entry.seq} [{entry.source}] {entry.event}
+              </div>
+              {entry.detail && <div className={styles.diagVoiceMeta}>{entry.detail}</div>}
             </div>
           ))
         )}
@@ -407,6 +597,8 @@ export function SettingsScreen() {
 
         {/* TEMPORARY — TTS Diagnostics (remove before release) */}
         <TtsDiagnostics />
+        {/* TEMPORARY — Piper Diagnostics (remove with piperDiagnostics.ts) */}
+        <PiperDiagnostics />
       </div>
 
       {/* Theme Picker Sheet */}

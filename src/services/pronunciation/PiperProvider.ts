@@ -14,12 +14,19 @@ import {
   PIPER_VERSION_STORAGE_KEY,
 } from './piperManifest'
 import type { PronunciationProgress } from './PronunciationProvider'
+// TEMPORARY diagnostics (remove with piperDiagnostics.ts).
+import {
+  logPiperDiag,
+  setPiperDownloadProgress,
+} from './piperDiagnostics'
 
 type WorkerOutgoing =
   | { type: 'ready' }
   | { type: 'progress'; loaded: number; total: number }
   | { type: 'result'; id: number; wav: ArrayBuffer }
   | { type: 'error'; id: number | null; message: string }
+  // TEMPORARY diagnostic event forwarded from the worker.
+  | { type: 'diag'; event: string; detail?: string; at: number }
 
 type WorkerIncoming =
   | { type: 'init' }
@@ -103,13 +110,21 @@ export class PiperProvider {
 
   /** Warm the runtime + model in the background (still lazy, never at boot). */
   warmUp(onProgress?: (progress: PronunciationProgress) => void): void {
-    if (this.disposed || this.initStarted) return
-    if (!piperOpfsSupported()) return
+    if (this.disposed || this.initStarted) {
+      logPiperDiag('main', 'main:warmup-skipped', 'disposed or already started')
+      return
+    }
+    if (!piperOpfsSupported()) {
+      logPiperDiag('main', 'main:warmup-skipped', 'OPFS unsupported')
+      return
+    }
     this.initStarted = true
+    logPiperDiag('main', 'main:warmup-called')
     void evictStaleModel()
       .catch(() => {})
       .then(() => this.ensureWorker())
       .then((worker) => {
+        logPiperDiag('main', 'main:init-posted')
         worker.postMessage({ type: 'init' } satisfies WorkerIncoming)
         if (onProgress) {
           // Track the next synthesize progress via a throwaway hook.
@@ -126,10 +141,17 @@ export class PiperProvider {
     const worker = new Worker(new URL('./piperWorker.ts', import.meta.url), {
       type: 'module',
     })
+    logPiperDiag('main', 'main:worker-created')
     worker.onmessage = (event: MessageEvent<WorkerOutgoing>) => {
       const message = event.data
       if (message.type === 'ready') {
         this.ready = true
+        logPiperDiag('main', 'main:ready-received', 'ready=true set')
+        return
+      }
+      // TEMPORARY: forward worker lifecycle events to the diag log.
+      if (message.type === 'diag') {
+        logPiperDiag('worker', message.event, message.detail)
         return
       }
       if (message.type === 'progress') {
@@ -140,6 +162,14 @@ export class PiperProvider {
           loaded: message.loaded,
           total: message.total,
         }
+        // TEMPORARY: snapshot for Settings + milestone log lines.
+        setPiperDownloadProgress({
+          started: true,
+          loaded: message.loaded,
+          total: message.total,
+          done: false,
+        })
+        this.logDownloadMilestone(message.loaded, message.total)
         this.progressHook?.(progress)
         for (const entry of this.pending.values()) entry.onProgress?.(progress)
         return
@@ -155,6 +185,8 @@ export class PiperProvider {
       if (message.type === 'error') {
         if (message.id === null) {
           // Init failure — fail all pending synthesizes.
+          // TEMPORARY: surface the actual init error.
+          logPiperDiag('main', 'main:init-error', message.message)
           const error = new Error(message.message)
           for (const [id, entry] of this.pending) {
             this.pending.delete(id)
@@ -164,12 +196,16 @@ export class PiperProvider {
         }
         const entry = this.pending.get(message.id)
         if (entry) {
+          // TEMPORARY: surface the actual synthesize error.
+          logPiperDiag('main', 'main:synthesize-error', message.message)
           this.pending.delete(message.id)
           entry.reject(new Error(message.message))
         }
       }
     }
     worker.onerror = () => {
+      // TEMPORARY: surface worker crashes in diagnostics.
+      logPiperDiag('main', 'main:worker-onerror', 'Worker error event (no detail from browser)')
       const error = new Error('Piper worker failed')
       for (const [id, entry] of this.pending) {
         this.pending.delete(id)
@@ -179,6 +215,35 @@ export class PiperProvider {
     this.worker = worker
     return worker
   }
+
+  // TEMPORARY download-milestone logging (remove with piperDiagnostics.ts).
+  private lastMilestone = -1
+
+  private logDownloadMilestone(loaded: number, total: number): void {
+    if (total <= 0) {
+      if (this.lastMilestone !== 0) {
+        this.lastMilestone = 0
+        logPiperDiag('main', 'main:download-progress', `${loaded} bytes (total unknown)`)
+      }
+      return
+    }
+    if (loaded < this.lastMilestoneLoaded) {
+      // New download (restart) — reset milestones.
+      this.lastMilestone = -1
+    }
+    this.lastMilestoneLoaded = loaded
+    const pct = Math.floor((loaded / total) * 100)
+    const milestone = pct >= 100 ? 100 : Math.floor(pct / 25) * 25
+    if (milestone > this.lastMilestone) {
+      this.lastMilestone = milestone
+      logPiperDiag('main', 'main:download-progress', `${pct}% (${loaded}/${total} bytes)`)
+      if (milestone >= 100) {
+        setPiperDownloadProgress({ started: true, loaded, total, done: true })
+      }
+    }
+  }
+
+  private lastMilestoneLoaded = 0
 
   /**
    * Synthesize text to a WAV ArrayBuffer. Rejects on any failure
