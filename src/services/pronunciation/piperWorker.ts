@@ -105,14 +105,27 @@ async function seedFileFromManifest(
     if (expectedBytes === undefined || cached.size === expectedBytes) return
     // Size mismatch (e.g. partial download) — re-download below.
   }
-  const response = await fetch(url)
-  if (!response.ok || !response.body) {
-    throw new Error(`Model download failed: HTTP ${response.status}`)
-  }
-  const total = Number(response.headers.get('Content-Length') ?? 0) || expectedBytes || 0
-  const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
-  let loaded = 0
+  // Retry transient network failures: iOS Safari workers often throw a bare
+  // `TypeError: Load failed` on the first fetch attempt (DNS/QUIC race in a
+  // freshly spawned worker, radio handoff, …). Only fully-assembled blobs
+  // are written to OPFS, so a failed attempt never leaves partial files.
+  const kind = name.endsWith('.onnx') ? 'model' : 'config'
+  const maxAttempts = 4
+  let lastError: unknown = null
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await fetch(url)
+      if (!response.ok || !response.body) {
+        // Retry rate-limiting and server errors; other 4xx are permanent.
+        if (response.status === 429 || response.status >= 500) {
+          throw new Error(`Model download failed: HTTP ${response.status} (retryable)`)
+        }
+        throw new Error(`Model download failed: HTTP ${response.status}`)
+      }
+      const total = Number(response.headers.get('Content-Length') ?? 0) || expectedBytes || 0
+      const reader = response.body.getReader()
+      const chunks: Uint8Array[] = []
+      let loaded = 0
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
@@ -122,16 +135,30 @@ async function seedFileFromManifest(
       onProgress(loaded, total)
     }
   }
-  const blob = new Blob(chunks as BlobPart[], { type: 'application/octet-stream' })
-  if (expectedBytes !== undefined && blob.size !== expectedBytes) {
-    throw new Error(`Model size mismatch: got ${blob.size}, expected ${expectedBytes}`)
+      const blob = new Blob(chunks as BlobPart[], { type: 'application/octet-stream' })
+      if (expectedBytes !== undefined && blob.size !== expectedBytes) {
+        throw new Error(`Model size mismatch: got ${blob.size}, expected ${expectedBytes}`)
+      }
+      const root = await navigator.storage.getDirectory()
+      const dir = await root.getDirectoryHandle('piper', { create: true })
+      const handle = await dir.getFileHandle(name, { create: true })
+      const writable = await handle.createWritable()
+      await writable.write(blob)
+      await writable.close()
+      return
+    } catch (error) {
+      lastError = error
+      const message = error instanceof Error ? error.message : String(error)
+      const permanentHttp =
+        message.startsWith('Model download failed: HTTP') && !message.includes('(retryable)')
+      if (permanentHttp || attempt === maxAttempts) {
+        throw error
+      }
+      diag(`worker:${kind}-fetch-retry`, `attempt ${attempt}/${maxAttempts} failed: ${message}`)
+      await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** (attempt - 1)))
+    }
   }
-  const root = await navigator.storage.getDirectory()
-  const dir = await root.getDirectoryHandle('piper', { create: true })
-  const handle = await dir.getFileHandle(name, { create: true })
-  const writable = await handle.createWritable()
-  await writable.write(blob)
-  await writable.close()
+  throw lastError instanceof Error ? lastError : new Error(String(lastError))
 }
 
 async function ensureSession(): Promise<void> {
