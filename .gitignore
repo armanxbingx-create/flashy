@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Piper TTS voice models — never commit the ~63 MB .onnx blobs.
+# The Amy model is downloaded at runtime into OPFS (see piperManifest.ts).
+*.onnx
+*.onnx.json
+models/
+voices/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

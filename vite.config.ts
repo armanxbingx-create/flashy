@@ -10,11 +10,24 @@ const HASHED_ASSET_DIR = 'assets/'
 
 // Files under public/ that belong to the app shell. The service worker itself
 // is excluded: the browser always validates it against the network.
+// Large Piper TTS model files are NEVER precached (the ~63 MB .onnx would
+// delay install and re-download on every build). They are fetched lazily on
+// first pronunciation request and persisted in OPFS instead. The large
+// ONNX Runtime WASM binaries (~10–21 MB) are likewise excluded: they load
+// on demand on first synthesis and are then served from the service worker's
+// runtime cache, keeping PWA install light on iPhone 8.
+const PRECACHE_EXCLUDED = [/\.onnx$/, /\.onnx\.json$/, /\.wasm$/, /^piper\//, /^models\//, /^voices\//]
+
+function isPrecacheExcluded(url: string): boolean {
+  return PRECACHE_EXCLUDED.some((pattern) => pattern.test(url))
+}
+
 function collectShellUrls(dir: string, base = '/'): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     if (entry.name === GENERATED_SW) return []
     const url = base + entry.name
     if (entry.isDirectory()) return collectShellUrls(join(dir, entry.name), `${url}/`)
+    if (isPrecacheExcluded(url)) return []
     return [url]
   })
 }
@@ -43,6 +56,7 @@ function serviceWorkerPlugin(): Plugin {
       const assets = Object.keys(bundle)
         .filter((file) => file.startsWith(HASHED_ASSET_DIR) && !file.endsWith('.map'))
         .map((file) => `/${file}`)
+        .filter((url) => !isPrecacheExcluded(url))
         .sort()
 
       const shell = ['/', '/index.html', ...collectShellUrls(join(root, 'public')), ...assets].sort()

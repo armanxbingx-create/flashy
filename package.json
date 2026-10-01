@@ -11,7 +11,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@realtimex/piper-tts-web": "1.1.1",
     "dexie": "^4.4.6",
+    "onnxruntime-web": "1.22.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

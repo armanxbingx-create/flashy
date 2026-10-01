@@ -4,6 +4,7 @@ import styles from './Flashcard.module.css'
 import { Button } from './Button'
 import { FeedbackOverlay } from './FeedbackOverlay'
 import { settingsRepository } from '../data/repositories/settingsRepository'
+import { getPronunciationService } from '../services/pronunciation/pronunciationService'
 
 interface FlashcardProps {
   front: string
@@ -108,48 +109,42 @@ export function Flashcard({
     onReveal?.()
   }
 
-  // Offline American-English pronunciation via the Web Speech API.
-  // Gated on the existing Sound setting (cached ref — no IndexedDB read here,
-  // so speak() runs synchronously inside the tap gesture). No network, files,
-  // or dependencies.
+  // Pronunciation via PronunciationProvider: Piper (local neural TTS in a
+  // Web Worker) is primary, Web Speech is the automatic fallback.
+  // Gated on the existing Sound setting (cached ref — no IndexedDB read
+  // here). The first tap still produces audio: Piper downloads lazily in
+  // the background while Web Speech speaks immediately; later taps use
+  // Piper once its model is cached. `speaking` only drives a minimal
+  // progress affordance on the button.
+  const [speaking, setSpeaking] = useState(false)
+  const speakRequest = useRef(0)
+
   const handleSpeak = useCallback(() => {
     if (!soundEnabledRef.current) return
-    if (typeof window === 'undefined') return
-    const synth = window.speechSynthesis
-    if (!synth || typeof SpeechSynthesisUtterance === 'undefined') return
     const text = front.trim()
     if (!text) return
-    try {
-      synth.cancel()
-      // Recover from a paused/stuck speech queue on iOS.
-      if (typeof synth.resume === 'function') synth.resume()
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.lang = 'en-US'
-      const voices = synth.getVoices()
-      const preferredVoice =
-        voices.find(
-          (voice) =>
-            voice.name?.toLowerCase().includes('allison') &&
-            voice.lang?.toLowerCase().startsWith('en'),
-        ) ??
-        voices.find((voice) => voice.lang?.toLowerCase() === 'en-us') ??
-        voices.find((voice) => voice.lang?.toLowerCase().startsWith('en'))
-      if (preferredVoice) utterance.voice = preferredVoice
-      synth.speak(utterance)
-    } catch {
-      // Speech synthesis unavailable — stay silent.
-    }
+    const request = ++speakRequest.current
+    setSpeaking(true)
+    void getPronunciationService()
+      .speak(text, {
+        onProgress: () => {
+          if (speakRequest.current === request) setSpeaking(true)
+        },
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (speakRequest.current === request) setSpeaking(false)
+      })
   }, [front])
 
-  // Stop any in-flight speech when the card unmounts (e.g. next card).
+  // Stop any in-flight pronunciation when the card unmounts (e.g. next card).
   useEffect(() => {
+    const service = getPronunciationService()
     return () => {
       try {
-        if (typeof window !== 'undefined' && window.speechSynthesis) {
-          window.speechSynthesis.cancel()
-        }
+        service.cancel()
       } catch {
-        // Ignore — speech cleanup is best-effort.
+        // Ignore — pronunciation cleanup is best-effort.
       }
     }
   }, [])
@@ -229,6 +224,8 @@ export function Flashcard({
                 onClick={handleSpeak}
                 onPointerDown={(e) => e.stopPropagation()}
                 aria-label={`Hear pronunciation of ${front}`}
+                aria-busy={speaking}
+                style={speaking ? { opacity: 0.6 } : undefined}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M11 5 6 9H2v6h4l5 4V5z" />

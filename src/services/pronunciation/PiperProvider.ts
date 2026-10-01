@@ -1,0 +1,301 @@
+/**
+ * PiperProvider — main-thread owner of the Piper Web Worker + WAV playback.
+ *
+ * - Lazy: no Worker, no download, no ONNX session until first `speak()`.
+ * - OPFS persistence with feature detection; Dexie schema untouched.
+ * - One synthesis job at a time; a new request cancels/replaces the old.
+ * - WAV playback via a dedicated HTMLAudioElement + Blob URL.
+ *   FeedbackSystem is never used here.
+ * - Any failure throws so the caller can fall back to Web Speech.
+ */
+
+import {
+  PIPER_MODEL_VERSION,
+  PIPER_VERSION_STORAGE_KEY,
+} from './piperManifest'
+import type { PronunciationProgress } from './PronunciationProvider'
+
+type WorkerOutgoing =
+  | { type: 'ready' }
+  | { type: 'progress'; loaded: number; total: number }
+  | { type: 'result'; id: number; wav: ArrayBuffer }
+  | { type: 'error'; id: number | null; message: string }
+
+type WorkerIncoming =
+  | { type: 'init' }
+  | { type: 'synthesize'; id: number; text: string }
+  | { type: 'cancel'; id: number }
+
+export function piperOpfsSupported(): boolean {
+  try {
+    return (
+      typeof navigator !== 'undefined' &&
+      !!navigator.storage &&
+      typeof (navigator.storage as unknown as { getDirectory?: unknown }).getDirectory ===
+        'function'
+    )
+  } catch {
+    return false
+  }
+}
+
+function readStoredVersion(): string | null {
+  try {
+    return window.localStorage.getItem(PIPER_VERSION_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writeStoredVersion(version: string): void {
+  try {
+    window.localStorage.setItem(PIPER_VERSION_STORAGE_KEY, version)
+  } catch {
+    // Private mode etc. — model still cached in OPFS for the session.
+  }
+}
+
+/** Remove a stale OPFS model copy when the manifest version changes. */
+async function evictStaleModel(): Promise<void> {
+  try {
+    if (readStoredVersion() === PIPER_MODEL_VERSION) return
+    const root = await navigator.storage.getDirectory()
+    // `removeEntry` is the broadly-typed DOM API; newer specs call it `remove`.
+    const removable = root as unknown as {
+      removeEntry?: (name: string, options?: { recursive?: boolean }) => Promise<void>
+      remove?: (options?: { recursive?: boolean }) => Promise<void>
+    }
+    if (typeof removable.removeEntry === 'function') {
+      await removable.removeEntry('piper', { recursive: true })
+    } else if (typeof removable.remove === 'function') {
+      const dir = await root.getDirectoryHandle('piper')
+      const dirRemovable = dir as unknown as {
+        remove?: (options?: { recursive?: boolean }) => Promise<void>
+      }
+      await dirRemovable.remove?.({ recursive: true })
+    }
+  } catch {
+    // Missing directory or unsupported — worker will report accurately.
+  }
+  writeStoredVersion(PIPER_MODEL_VERSION)
+}
+
+export class PiperProvider {
+  private worker: Worker | null = null
+  private nextId = 1
+  private pending = new Map<
+    number,
+    {
+      resolve: (wav: ArrayBuffer) => void
+      reject: (error: Error) => void
+      onProgress?: (progress: PronunciationProgress) => void
+    }
+  >()
+  private ready = false
+  private initStarted = false
+  private audio: HTMLAudioElement | null = null
+  private objectUrl: string | null = null
+  private disposed = false
+
+  get isReady(): boolean {
+    return this.ready
+  }
+
+  /** Warm the runtime + model in the background (still lazy, never at boot). */
+  warmUp(onProgress?: (progress: PronunciationProgress) => void): void {
+    if (this.disposed || this.initStarted) return
+    if (!piperOpfsSupported()) return
+    this.initStarted = true
+    void evictStaleModel()
+      .catch(() => {})
+      .then(() => this.ensureWorker())
+      .then((worker) => {
+        worker.postMessage({ type: 'init' } satisfies WorkerIncoming)
+        if (onProgress) {
+          // Track the next synthesize progress via a throwaway hook.
+          this.progressHook = onProgress
+        }
+      })
+      .catch(() => {})
+  }
+
+  private progressHook: ((progress: PronunciationProgress) => void) | null = null
+
+  private ensureWorker(): Worker {
+    if (this.worker) return this.worker
+    const worker = new Worker(new URL('./piperWorker.ts', import.meta.url), {
+      type: 'module',
+    })
+    worker.onmessage = (event: MessageEvent<WorkerOutgoing>) => {
+      const message = event.data
+      if (message.type === 'ready') {
+        this.ready = true
+        return
+      }
+      if (message.type === 'progress') {
+        const fraction =
+          message.total > 0 ? Math.min(1, message.loaded / message.total) : undefined
+        const progress: PronunciationProgress = {
+          fraction,
+          loaded: message.loaded,
+          total: message.total,
+        }
+        this.progressHook?.(progress)
+        for (const entry of this.pending.values()) entry.onProgress?.(progress)
+        return
+      }
+      if (message.type === 'result') {
+        const entry = this.pending.get(message.id)
+        if (entry) {
+          this.pending.delete(message.id)
+          entry.resolve(message.wav)
+        }
+        return
+      }
+      if (message.type === 'error') {
+        if (message.id === null) {
+          // Init failure — fail all pending synthesizes.
+          const error = new Error(message.message)
+          for (const [id, entry] of this.pending) {
+            this.pending.delete(id)
+            entry.reject(error)
+          }
+          return
+        }
+        const entry = this.pending.get(message.id)
+        if (entry) {
+          this.pending.delete(message.id)
+          entry.reject(new Error(message.message))
+        }
+      }
+    }
+    worker.onerror = () => {
+      const error = new Error('Piper worker failed')
+      for (const [id, entry] of this.pending) {
+        this.pending.delete(id)
+        entry.reject(error)
+      }
+    }
+    this.worker = worker
+    return worker
+  }
+
+  /**
+   * Synthesize text to a WAV ArrayBuffer. Rejects on any failure
+   * (unsupported OPFS, download error, inference error) so the caller
+   * can fall back to Web Speech immediately.
+   */
+  synthesize(
+    text: string,
+    onProgress?: (progress: PronunciationProgress) => void,
+  ): Promise<ArrayBuffer> {
+    if (this.disposed) return Promise.reject(new Error('Piper disposed'))
+    if (!piperOpfsSupported()) return Promise.reject(new Error('OPFS_UNSUPPORTED'))
+    const trimmed = text.trim()
+    if (!trimmed) return Promise.reject(new Error('Empty text'))
+    // One job at a time: fail superseded requests rather than queueing.
+    for (const [id, entry] of this.pending) {
+      this.pending.delete(id)
+      entry.reject(new Error('Superseded by newer request'))
+      try {
+        this.worker?.postMessage({ type: 'cancel', id } satisfies WorkerIncoming)
+      } catch {
+        // Ignore — worker teardown is best-effort.
+      }
+    }
+    this.stopAudio()
+    if (!this.initStarted) {
+      this.initStarted = true
+      // Fire-and-forget version eviction; worker pre-seed validates size.
+      void evictStaleModel().catch(() => {})
+    }
+    const worker = this.ensureWorker()
+    const id = this.nextId++
+    const promise = new Promise<ArrayBuffer>((resolve, reject) => {
+      this.pending.set(id, { resolve, reject, onProgress })
+    })
+    try {
+      worker.postMessage({ type: 'synthesize', id, text: trimmed } satisfies WorkerIncoming)
+    } catch (error) {
+      this.pending.delete(id)
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)))
+    }
+    return promise
+  }
+
+  /**
+   * Synthesize and play through a dedicated HTMLAudioElement.
+   * Rejects if playback fails (e.g. iOS gesture restriction) so the
+   * caller can fall back to Web Speech.
+   */
+  async speak(
+    text: string,
+    onProgress?: (progress: PronunciationProgress) => void,
+  ): Promise<void> {
+    const wav = await this.synthesize(text, onProgress)
+    this.stopAudio()
+    const blob = new Blob([wav], { type: 'audio/wav' })
+    const url = URL.createObjectURL(blob)
+    this.objectUrl = url
+    try {
+      const audio = new Audio(url)
+      audio.preload = 'auto'
+      this.audio = audio
+      await audio.play()
+      await new Promise<void>((resolve) => {
+        const done = () => {
+          audio.removeEventListener('ended', done)
+          audio.removeEventListener('error', done)
+          resolve()
+        }
+        audio.addEventListener('ended', done)
+        audio.addEventListener('error', done)
+      })
+    } finally {
+      this.stopAudio()
+    }
+  }
+
+  /** Stop Piper audio + revoke Blob URL. Never throws. */
+  stopAudio(): void {
+    try {
+      if (this.audio) {
+        this.audio.pause()
+        this.audio.src = ''
+      }
+    } catch {
+      // Ignore.
+    }
+    this.audio = null
+    try {
+      if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
+    } catch {
+      // Ignore.
+    }
+    this.objectUrl = null
+  }
+
+  cancel(): void {
+    for (const [id, entry] of this.pending) {
+      this.pending.delete(id)
+      entry.reject(new Error('Cancelled'))
+      try {
+        this.worker?.postMessage({ type: 'cancel', id } satisfies WorkerIncoming)
+      } catch {
+        // Ignore.
+      }
+    }
+    this.stopAudio()
+  }
+
+  dispose(): void {
+    this.disposed = true
+    this.cancel()
+    try {
+      this.worker?.terminate()
+    } catch {
+      // Ignore.
+    }
+    this.worker = null
+  }
+}
