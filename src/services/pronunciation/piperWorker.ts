@@ -78,6 +78,78 @@ function describeWorkerError(error: unknown): string {
   return `Unknown: ${String(error)}`
 }
 
+// MEMORY EXPERIMENT (iPhone 8 OOM during InferenceSession.create):
+// TtsSession.init() calls InferenceSession.create(modelBytes) with full
+// defaults (graph optimization 'all', CPU arena on) and sets
+// env.wasm.numThreads = hardwareConcurrency right before creation. This
+// temporarily patches the SHARED onnxruntime-web module object (the same
+// instance TtsSession imports) so creation happens with low-peak options
+// and numThreads forced to 1 immediately beforehand. Restored right after
+// waitReady() settles. If patching is impossible, init proceeds unpatched.
+let ortCreateRestore: (() => void) | null = null
+
+async function patchOrtSessionCreateForLowPeak(): Promise<void> {
+  try {
+    const ortModule = await import('onnxruntime-web')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ortNs = (ortModule as any).default ?? ortModule
+    const sessionClass = ortNs?.InferenceSession
+    const originalCreate = sessionClass?.create
+    if (typeof originalCreate !== 'function') {
+      diag('worker:ort-patch-skipped', 'InferenceSession.create not found')
+      return
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const patchedCreate = async function (this: unknown, ...args: any[]) {
+      try {
+        if (ortNs?.env?.wasm) ortNs.env.wasm.numThreads = 1
+      } catch {
+        // Ignore — thread setting is best-effort here.
+      }
+      const last = args[args.length - 1]
+      const lastIsOptions =
+        args.length > 1 &&
+        typeof last === 'object' &&
+        last !== null &&
+        !(last instanceof ArrayBuffer) &&
+        !ArrayBuffer.isView(last) &&
+        typeof last !== 'number'
+      const mergedOptions = {
+        graphOptimizationLevel: 'basic' as const,
+        enableCpuMemArena: false,
+        executionMode: 'sequential' as const,
+        ...((lastIsOptions ? last : {}) as Record<string, unknown>),
+      }
+      const baseArgs = lastIsOptions ? args.slice(0, -1) : args
+      return originalCreate.call(sessionClass, ...baseArgs, mergedOptions)
+    }
+    sessionClass.create = patchedCreate
+    if (sessionClass.create !== patchedCreate) {
+      diag('worker:ort-patch-skipped', 'create property is not writable')
+      return
+    }
+    ortCreateRestore = () => {
+      try {
+        if (sessionClass.create === patchedCreate) sessionClass.create = originalCreate
+      } catch {
+        // Ignore — restore is best-effort.
+      }
+    }
+    diag('worker:ort-patch-applied', 'basic/no-arena/sequential/numThreads=1')
+  } catch (error) {
+    diag('worker:ort-patch-skipped', describeWorkerError(error))
+  }
+}
+
+function restoreOrtSessionCreate(): void {
+  try {
+    ortCreateRestore?.()
+  } catch {
+    // Ignore — restore is best-effort.
+  }
+  ortCreateRestore = null
+}
+
 function opfsSupported(): boolean {
   try {
     return (
@@ -176,6 +248,7 @@ async function ensureSession(): Promise<void> {
     }
 
     diag('worker:tts-session-construct-start', PIPER_VOICE_ID)
+    await patchOrtSessionCreateForLowPeak()
     const ttsSession = new TtsSessionClass({
       voiceId: PIPER_VOICE_ID,
       progress: (progress: { loaded: number; total: number }) => {
@@ -183,7 +256,11 @@ async function ensureSession(): Promise<void> {
       },
     })
     diag('worker:waitready-start')
-    await ttsSession.waitReady
+    try {
+      await ttsSession.waitReady
+    } finally {
+      restoreOrtSessionCreate()
+    }
     diag('worker:waitready-complete')
     // TtsSession.init resets numThreads to hardwareConcurrency; force
     // single-thread back (ORT also self-forces 1 when the page is not
