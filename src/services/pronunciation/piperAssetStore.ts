@@ -58,6 +58,22 @@ export async function readCachedAsset(name: string): Promise<File | undefined> {
   }
 }
 
+/** Best-effort removal of a (possibly partial) cached file. Never throws. */
+async function removeCachedAsset(name: string): Promise<void> {
+  try {
+    const root = await navigator.storage.getDirectory()
+    const dir = await root.getDirectoryHandle('piper')
+    const removable = dir as unknown as {
+      removeEntry?: (name: string) => Promise<void>
+    }
+    if (typeof removable.removeEntry === 'function') {
+      await removable.removeEntry(name)
+    }
+  } catch {
+    // Ignore — size checks treat leftovers as a cache miss anyway.
+  }
+}
+
 function readStoredVersion(): string | null {
   try {
     return window.localStorage.getItem(PIPER_VERSION_STORAGE_KEY)
@@ -146,11 +162,170 @@ function emitProgress(loaded: number, total: number): void {
 
 const progressListeners = new Set<(loaded: number, total: number) => void>()
 
+type WriterIncoming =
+  | { type: 'open'; name: string }
+  | { type: 'chunk'; data: ArrayBuffer }
+  | { type: 'close'; expectedBytes?: number; validateJson?: boolean }
+
+type WriterOutgoing =
+  | { type: 'opened' }
+  | { type: 'ack'; bytes: number }
+  | { type: 'done'; size: number }
+  | { type: 'error'; message: string }
+  | { type: 'diag'; event: string; detail?: string; at: number }
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`OPFS writer timeout: ${label}`)), ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer)
+  })
+}
+
 /**
- * Fetch one asset with retry (4 attempts, 1s/2s/4s backoff). Retries network
- * throws and retryable HTTP (429/5xx); other 4xx fail immediately. Only a
- * fully-assembled, size-verified blob is written to OPFS.
+ * Streams response bytes into OPFS through the dedicated writer worker
+ * (see piperAssetWriter.ts). The main thread reads the network stream and
+ * forwards each chunk with a transferable, awaiting every ack so memory
+ * stays bounded. Resolves with the verified final size. Rejects clearly —
+ * including when the device lacks the sync-handle API — so callers fall
+ * back to Web Speech instead of corrupting the cache.
  */
+async function streamResponseToOpfs(
+  name: string,
+  response: Response,
+  expectedBytes: number | undefined,
+  validateJson: boolean,
+  kind: 'config' | 'model',
+  onChunk: (loaded: number, total: number) => void,
+): Promise<number> {
+  const total = Number(response.headers.get('Content-Length') ?? 0) || expectedBytes || 0
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error('Model download failed: empty response body')
+  const worker = new Worker(new URL('./piperAssetWriter.ts', import.meta.url), {
+    type: 'module',
+  })
+  logPiperDiag('main', 'main:asset-writer-created', name)
+  // Final verified size reported by the writer worker on close.
+  let doneSize = 0
+  const pending = new Map<string, { resolve: () => void; reject: (error: Error) => void }>()
+  const failAll = (error: Error) => {
+    for (const [, entry] of pending) entry.reject(error)
+    pending.clear()
+  }
+  worker.onmessage = (event: MessageEvent<WriterOutgoing>) => {
+    const message = event.data
+    if (message.type === 'diag') {
+      logPiperDiag('worker', message.event, message.detail)
+      return
+    }
+    if (message.type === 'error') {
+      failAll(new Error(message.message))
+      return
+    }
+    if (message.type === 'done') {
+      doneSize = message.size
+      const entry = pending.get('close')
+      if (entry) {
+        pending.delete('close')
+        entry.resolve()
+      }
+      return
+    }
+    const key = message.type === 'opened' ? 'open' : message.type === 'ack' ? 'chunk' : null
+    if (key) {
+      const entry = pending.get(key)
+      if (entry) {
+        pending.delete(key)
+        entry.resolve()
+      }
+    }
+  }
+  worker.onerror = () => {
+    failAll(new Error('OPFS writer worker failed'))
+  }
+  const request = (key: string, message: WriterIncoming, transfer?: Transferable[]): Promise<void> =>
+    new Promise<void>((resolve, reject) => {
+      pending.set(key, { resolve, reject })
+      try {
+        worker.postMessage(message, transfer ?? [])
+      } catch (error) {
+        pending.delete(key)
+        reject(error instanceof Error ? error : new Error(String(error)))
+      }
+    })
+  const terminate = () => {
+    try {
+      worker.terminate()
+    } catch {
+      // Ignore — teardown is best-effort.
+    }
+  }
+  // Final verified size reported by the writer worker on close.
+  try {
+    await withTimeout(
+      request('open', { type: 'open', name }),
+      30000,
+      `open ${name}`,
+    )
+    let loaded = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value) {
+        const buffer = value.buffer.slice(
+          value.byteOffset,
+          value.byteOffset + value.byteLength,
+        ) as ArrayBuffer
+        loaded += buffer.byteLength
+        await withTimeout(
+          request('chunk', { type: 'chunk', data: buffer }, [buffer]),
+          30000,
+          `chunk @${loaded} of ${name}`,
+        )
+        onChunk(loaded, total)
+      }
+    }
+    let finalSize = 0
+    await withTimeout(
+      new Promise<void>((resolve, reject) => {
+        // The 'done' branch of onmessage records the verified size into
+        // doneSize before resolving, so it is valid to read after await.
+        const checkDone = () => {
+          const entry = pending.get('close')
+          if (entry) {
+            pending.delete('close')
+            finalSize = doneSize
+            resolve()
+          }
+        }
+        pending.set('close', { resolve: checkDone, reject })
+        try {
+          worker.postMessage({ type: 'close', expectedBytes, validateJson })
+        } catch (error) {
+          pending.delete('close')
+          reject(error instanceof Error ? error : new Error(String(error)))
+        }
+      }),
+      60000,
+      `close ${name}`,
+    )
+    logPiperDiag('main', `main:asset-${kind}-download-complete`, `${finalSize} bytes → OPFS`)
+    return finalSize
+  } catch (error) {
+    // Never leave a partial file that could later be treated as valid.
+    await removeCachedAsset(name)
+    try {
+      await reader.cancel()
+    } catch {
+      // Ignore — the network stream is already broken or consumed.
+    }
+    throw error
+  } finally {
+    terminate()
+  }
+}
 async function downloadAsset(
   name: string,
   url: string,
@@ -168,33 +343,21 @@ async function downloadAsset(
         }
         throw new Error(`Model download failed: HTTP ${response.status}`)
       }
-      const total = Number(response.headers.get('Content-Length') ?? 0) || expectedBytes || 0
       // TEMPORARY: reset milestones per fresh download attempt.
       lastMilestone = -1
       lastMilestoneLoaded = 0
-      const reader = response.body.getReader()
-      const chunks: Uint8Array[] = []
-      let loaded = 0
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        if (value) {
-          chunks.push(value)
-          loaded += value.length
-          emitProgress(loaded, total)
-        }
-      }
-      const blob = new Blob(chunks as BlobPart[], { type: 'application/octet-stream' })
-      if (expectedBytes !== undefined && blob.size !== expectedBytes) {
-        throw new Error(`Model size mismatch: got ${blob.size}, expected ${expectedBytes}`)
-      }
-      const root = await navigator.storage.getDirectory()
-      const dir = await root.getDirectoryHandle('piper', { create: true })
-      const handle = await dir.getFileHandle(name, { create: true })
-      const writable = await handle.createWritable()
-      await writable.write(blob)
-      await writable.close()
-      logPiperDiag('main', `main:asset-${kind}-download-complete`, `${blob.size} bytes → OPFS`)
+      // The main thread reads the network stream here (progress reporting
+      // is unchanged); persistence goes through the writer worker because
+      // FileSystemFileHandle.createWritable() is missing on older iOS.
+      // The config additionally gets JSON-validated on write.
+      await streamResponseToOpfs(
+        name,
+        response,
+        expectedBytes,
+        kind === 'config',
+        kind,
+        (loaded, total) => emitProgress(loaded, total),
+      )
       return
     } catch (error) {
       lastError = error
@@ -226,6 +389,20 @@ async function ensurePiperAsset(
   const cached = await readCachedAsset(name)
   if (cached && cached.size > 0) {
     if (expectedBytes === undefined || cached.size === expectedBytes) {
+      // The config has no expected size, so a killed mid-write run could
+      // leave a non-empty but truncated file. JSON is cheap to revalidate
+      // (~5 KB) and closes that window.
+      if (kind === 'config') {
+        try {
+          JSON.parse(await cached.text())
+        } catch {
+          logPiperDiag('main', 'main:asset-cache-miss', `${name} is not valid JSON — re-downloading`)
+          await removeCachedAsset(name)
+          logPiperDiag('main', `main:asset-${kind}-download-start`, url)
+          await downloadAsset(name, url, expectedBytes, kind)
+          return
+        }
+      }
       logPiperDiag('main', 'main:asset-cache-hit', `${name} (${cached.size} bytes, no download)`)
       return
     }
