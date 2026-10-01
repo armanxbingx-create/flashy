@@ -6,23 +6,16 @@
  * persisted in OPFS (see PiperProvider). The manifest itself is a few
  * hundred bytes and ships with the app shell.
  *
- * Model hosting: Cloudflare Workers Static Assets caps files at 25 MiB,
- * so the model cannot live there. Host both files in Cloudflare R2
- * (public bucket or custom domain) and set `VITE_PIPER_ASSET_BASE_URL`
- * at build time — no credentials, no API, no backend, plain static GETs.
- * After caching, synthesis is offline.
+ * Model hosting: the Cloudflare Worker serves both files same-origin
+ * (it proxies the GitHub Release assets server-side), because iPhone
+ * fetches to GitHub/Hugging Face fail directly from the browser/Worker.
+ * No credentials, no API — plain same-origin GETs. After caching in OPFS,
+ * synthesis is offline.
  *
- * R2 layout (exact keys):
- *   piper/en_US-amy-medium.onnx
- *   piper/en_US-amy-medium.onnx.json
- *
- * Final runtime URLs (no redirects, CORS-enabled on R2):
- *   <VITE_PIPER_ASSET_BASE_URL>/piper/en_US-amy-medium.onnx
- *   <VITE_PIPER_ASSET_BASE_URL>/piper/en_US-amy-medium.onnx.json
- *
- * Fallback default: verified Hugging Face source for `en_US-amy-medium`
- * (kept only so local dev builds still resolve; iOS workers cannot fetch
- * it reliably — see diagnostics. Set the R2 base URL for production).
+ * Final runtime URLs (same-origin relative, resolved against the Flashy
+ * origin — the Worker streams the upstream GitHub Release bytes):
+ *   /piper/en_US-amy-medium.onnx
+ *   /piper/en_US-amy-medium.onnx.json
  *
  * License note (personal-use PWA): Amy weights derive from
  * MycroftAI/mimic3-voices (CC-BY-SA-4.0, attribution required) and were
@@ -30,13 +23,6 @@
  * see investigation report). Keep MODEL_CARD + attribution next to the
  * hosted model. Not cleared for commercial redistribution.
  */
-
-const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {}
-
-const HF_MODEL_URL =
-  'https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/amy/medium/en_US-amy-medium.onnx'
-const HF_CONFIG_URL =
-  'https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/amy/medium/en_US-amy-medium.onnx.json'
 
 export const PIPER_VOICE_ID = 'en_US-amy-medium' as const
 
@@ -47,18 +33,14 @@ export const PIPER_MODEL_FILE = 'en_US-amy-medium.onnx' as const
 export const PIPER_CONFIG_FILE = 'en_US-amy-medium.onnx.json' as const
 
 /**
- * Single configurable asset base, e.g. `https://<R2-public-host>` (no
- * trailing slash needed). Final URLs are `${base}/piper/<file>`.
- * Unset (local dev default) → Hugging Face fallback URLs.
+ * Same-origin relative URLs served by the Cloudflare Worker proxy
+ * (`/piper/*` in worker.ts), which streams the GitHub Release assets
+ * server-side. Relative so the app automatically uses the current Flashy
+ * origin. No GitHub/Hugging Face fallback — direct iPhone fetches to those
+ * hosts fail, and the proxy is the verified working path.
  */
-const PIPER_ASSET_BASE_URL = (env['VITE_PIPER_ASSET_BASE_URL'] ?? '').replace(/\/+$/, '')
-
-export const PIPER_MODEL_URL = PIPER_ASSET_BASE_URL
-  ? `${PIPER_ASSET_BASE_URL}/piper/${PIPER_MODEL_FILE}`
-  : HF_MODEL_URL
-export const PIPER_CONFIG_URL = PIPER_ASSET_BASE_URL
-  ? `${PIPER_ASSET_BASE_URL}/piper/${PIPER_CONFIG_FILE}`
-  : HF_CONFIG_URL
+export const PIPER_MODEL_URL = `/piper/${PIPER_MODEL_FILE}`
+export const PIPER_CONFIG_URL = `/piper/${PIPER_CONFIG_FILE}`
 
 /** Exact byte size from rhasspy `voices.json` — used as a sanity check. */
 export const PIPER_EXPECTED_MODEL_BYTES = 63201294
