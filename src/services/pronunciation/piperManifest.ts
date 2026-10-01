@@ -7,13 +7,22 @@
  * hundred bytes and ships with the app shell.
  *
  * Model hosting: Cloudflare Workers Static Assets caps files at 25 MiB,
- * so the model cannot live there. Point these URLs at Cloudflare R2
- * (public bucket or custom domain) when ready. No credentials, no API,
- * no backend — plain static GETs. After caching, synthesis is offline.
+ * so the model cannot live there. Host both files in Cloudflare R2
+ * (public bucket or custom domain) and set `VITE_PIPER_ASSET_BASE_URL`
+ * at build time — no credentials, no API, no backend, plain static GETs.
+ * After caching, synthesis is offline.
  *
- * Temporary default: verified Hugging Face source for `en_US-amy-medium`.
- * Override with `VITE_PIPER_MODEL_URL` / `VITE_PIPER_CONFIG_URL` at build
- * time to point at R2 without code changes.
+ * R2 layout (exact keys):
+ *   piper/en_US-amy-medium.onnx
+ *   piper/en_US-amy-medium.onnx.json
+ *
+ * Final runtime URLs (no redirects, CORS-enabled on R2):
+ *   <VITE_PIPER_ASSET_BASE_URL>/piper/en_US-amy-medium.onnx
+ *   <VITE_PIPER_ASSET_BASE_URL>/piper/en_US-amy-medium.onnx.json
+ *
+ * Fallback default: verified Hugging Face source for `en_US-amy-medium`
+ * (kept only so local dev builds still resolve; iOS workers cannot fetch
+ * it reliably — see diagnostics. Set the R2 base URL for production).
  *
  * License note (personal-use PWA): Amy weights derive from
  * MycroftAI/mimic3-voices (CC-BY-SA-4.0, attribution required) and were
@@ -37,8 +46,19 @@ export const PIPER_MODEL_VERSION = 'amy-medium-rhasspy-v1.0.0-r1' as const
 export const PIPER_MODEL_FILE = 'en_US-amy-medium.onnx' as const
 export const PIPER_CONFIG_FILE = 'en_US-amy-medium.onnx.json' as const
 
-export const PIPER_MODEL_URL = env['VITE_PIPER_MODEL_URL'] ?? HF_MODEL_URL
-export const PIPER_CONFIG_URL = env['VITE_PIPER_CONFIG_URL'] ?? HF_CONFIG_URL
+/**
+ * Single configurable asset base, e.g. `https://<R2-public-host>` (no
+ * trailing slash needed). Final URLs are `${base}/piper/<file>`.
+ * Unset (local dev default) → Hugging Face fallback URLs.
+ */
+const PIPER_ASSET_BASE_URL = (env['VITE_PIPER_ASSET_BASE_URL'] ?? '').replace(/\/+$/, '')
+
+export const PIPER_MODEL_URL = PIPER_ASSET_BASE_URL
+  ? `${PIPER_ASSET_BASE_URL}/piper/${PIPER_MODEL_FILE}`
+  : HF_MODEL_URL
+export const PIPER_CONFIG_URL = PIPER_ASSET_BASE_URL
+  ? `${PIPER_ASSET_BASE_URL}/piper/${PIPER_CONFIG_FILE}`
+  : HF_CONFIG_URL
 
 /** Exact byte size from rhasspy `voices.json` — used as a sanity check. */
 export const PIPER_EXPECTED_MODEL_BYTES = 63201294

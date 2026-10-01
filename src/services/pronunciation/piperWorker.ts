@@ -33,6 +33,8 @@ type IncomingMessage =
   | { type: 'cancel'; id: number }
   // TEMPORARY diagnostic probe (remove with piperDiagnostics.ts).
   | { type: 'fetch-test' }
+  // TEMPORARY GitHub fetch probe (remove with piperDiagnostics.ts).
+  | { type: 'fetch-test-github' }
 
 type OutgoingMessage =
   | { type: 'ready' }
@@ -43,6 +45,8 @@ type OutgoingMessage =
   | { type: 'diag'; event: string; detail?: string; at: number }
   // TEMPORARY fetch-test completion marker (remove with piperDiagnostics.ts).
   | { type: 'fetch-test-done' }
+  // TEMPORARY GitHub fetch-test completion marker (remove with piperDiagnostics.ts).
+  | { type: 'github-fetch-test-done'; ok: boolean }
 
 const ctx = self as unknown as {
   postMessage(message: OutgoingMessage, transfer?: Transferable[]): void
@@ -175,6 +179,9 @@ async function ensureSession(): Promise<void> {
       throw new Error('OPFS_UNSUPPORTED')
     }
     diag('worker:opfs-check', 'ok')
+    // TEMPORARY: show the final resolved asset URLs (R2 base or HF fallback).
+    // No user text or secrets — these are public static model URLs.
+    diag('worker:asset-urls', `config=${PIPER_CONFIG_URL} model=${PIPER_MODEL_URL}`)
     // Single-thread WASM: no SharedArrayBuffer, no COOP/COEP. On a
     // non-crossOriginIsolated page ORT forces this anyway; set it
     // explicitly so desktop dev matches iPhone behavior.
@@ -328,8 +335,54 @@ async function runFetchTest(): Promise<void> {
   }
 }
 
+/**
+ * TEMPORARY diagnostic probe (remove with piperDiagnostics.ts).
+ * Tests whether the iOS worker can fetch the public GitHub Release asset.
+ * Exact URL under test (public, no auth). Reads only — never touches OPFS,
+ * never persists, never initializes Piper, never downloads the 63 MB model.
+ */
+const GITHUB_FETCH_TEST_URL =
+  'https://github.com/armanxbingx-create/flashy/releases/download/piper-assets-v1/en_US-amy-medium.onnx.json'
+
+async function runGithubFetchTest(): Promise<void> {
+  let ok = false
+  try {
+    diag('worker:github-fetch-test-start', GITHUB_FETCH_TEST_URL)
+    let response: Response | null = null
+    try {
+      response = await fetch(GITHUB_FETCH_TEST_URL, { method: 'GET' })
+      diag(
+        'worker:github-fetch-test-fetch-ok',
+        `resolved-url=${response.url} status=${response.status} ok=${response.ok} ` +
+          `content-type=${response.headers.get('Content-Type') ?? '—'} ` +
+          `content-length=${response.headers.get('Content-Length') ?? '—'}`,
+      )
+    } catch (error) {
+      diag('worker:github-fetch-test-fetch-failed', describeWorkerError(error))
+    }
+    if (response) {
+      try {
+        const buffer = await response.arrayBuffer()
+        ok = response.ok && buffer.byteLength > 0
+        diag('worker:github-fetch-test-read-ok', `${buffer.byteLength} bytes read`)
+      } catch (error) {
+        diag('worker:github-fetch-test-read-failed', describeWorkerError(error))
+      }
+    } else {
+      diag('worker:github-fetch-test-read-skipped', 'no response (fetch failed)')
+    }
+  } finally {
+    diag(`worker:github-fetch-test-done ${ok ? 'success' : 'failed'}`)
+    post({ type: 'github-fetch-test-done', ok })
+  }
+}
+
 ctx.onmessage = (event: MessageEvent<IncomingMessage>) => {
   const message = event.data
+  if (message.type === 'fetch-test-github') {
+    void runGithubFetchTest()
+    return
+  }
   if (message.type === 'fetch-test') {
     void runFetchTest()
     return

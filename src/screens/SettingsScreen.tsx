@@ -22,6 +22,7 @@ import {
   type OpfsProbeResult,
 } from '../services/pronunciation/piperDiagnostics'
 import {
+  diagnoseGithubFetch,
   diagnosePiperWarmUp,
   diagnoseWorkerFetch,
   getPronunciationService,
@@ -253,6 +254,10 @@ function PiperDiagnostics() {
     void diagnoseWorkerFetch()
   }, [])
 
+  const handleGithubFetchTest = useCallback(() => {
+    void diagnoseGithubFetch()
+  }, [])
+
   const handleClear = useCallback(() => {
     clearPiperDiag()
   }, [])
@@ -361,6 +366,10 @@ function PiperDiagnostics() {
         <div className={`${styles.row} ${styles.rowInteractive}`} onClick={handleFetchTest}>
           <span className={styles.rowLabel}>Test Worker fetch</span>
           <span className={styles.rowValueSmall}>GET + HEAD config URL</span>
+        </div>
+        <div className={`${styles.row} ${styles.rowInteractive}`} onClick={handleGithubFetchTest}>
+          <span className={styles.rowLabel}>Test GitHub Worker fetch</span>
+          <span className={styles.rowValueSmall}>GET release asset</span>
         </div>
         <div className={`${styles.row} ${styles.rowInteractive}`} onClick={handleClear}>
           <span className={styles.rowLabel}>Clear event log</span>

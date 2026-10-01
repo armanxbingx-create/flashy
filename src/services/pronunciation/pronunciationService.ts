@@ -136,6 +136,29 @@ class CompositePronunciationService implements PronunciationProvider {
     logPiperDiag('main', 'main:diag-fetchtest', 'fetch test requested from Settings diagnostics')
     return piper.runFetchTest()
   }
+
+  /**
+   * TEMPORARY diagnostic entry point (remove with piperDiagnostics.ts).
+   * Runs the worker GitHub Release fetch probe. Writes nothing, persists
+   * nothing, speaks nothing, never initializes Piper.
+   */
+  runGithubFetchTestForDiagnostics(): Promise<boolean> {
+    const piper = this.ensurePiper()
+    if (!piper) {
+      logPiperDiag(
+        'main',
+        'main:diag-github-fetchtest',
+        'ensurePiper returned null (OPFS unsupported)',
+      )
+      return Promise.reject(new Error('OPFS unsupported'))
+    }
+    logPiperDiag(
+      'main',
+      'main:diag-github-fetchtest',
+      'GitHub fetch test requested from Settings diagnostics',
+    )
+    return piper.runGithubFetchTest()
+  }
 }
 
 let singleton: CompositePronunciationService | null = null
@@ -176,6 +199,30 @@ export function diagnoseWorkerFetch(): Promise<void> {
     })
   } catch (error) {
     logPiperDiag('main', 'main:diag-fetchtest-failed', formatDiagError(error))
+    return Promise.resolve()
+  }
+}
+
+/**
+ * TEMPORARY diagnostic entry point (remove with piperDiagnostics.ts).
+ * Probes worker fetch of the public GitHub Release asset without writing,
+ * persisting, speaking, or initializing Piper.
+ */
+export function diagnoseGithubFetch(): Promise<void> {
+  try {
+    if (!singleton) singleton = new CompositePronunciationService()
+    return singleton.runGithubFetchTestForDiagnostics().then(
+      () => {},
+      (error: unknown) => {
+        logPiperDiag(
+          'main',
+          'main:diag-github-fetchtest-failed',
+          error instanceof Error ? error.message : String(error),
+        )
+      },
+    )
+  } catch (error) {
+    logPiperDiag('main', 'main:diag-github-fetchtest-failed', formatDiagError(error))
     return Promise.resolve()
   }
 }

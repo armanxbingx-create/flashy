@@ -29,6 +29,8 @@ type WorkerOutgoing =
   | { type: 'diag'; event: string; detail?: string; at: number }
   // TEMPORARY fetch-test completion marker forwarded from the worker.
   | { type: 'fetch-test-done' }
+  // TEMPORARY GitHub fetch-test completion marker (remove with piperDiagnostics.ts).
+  | { type: 'github-fetch-test-done'; ok: boolean }
 
 type WorkerIncoming =
   | { type: 'init' }
@@ -36,6 +38,8 @@ type WorkerIncoming =
   | { type: 'cancel'; id: number }
   // TEMPORARY diagnostic probe (remove with piperDiagnostics.ts).
   | { type: 'fetch-test' }
+  // TEMPORARY GitHub fetch probe (remove with piperDiagnostics.ts).
+  | { type: 'fetch-test-github' }
 
 export function piperOpfsSupported(): boolean {
   try {
@@ -166,6 +170,17 @@ export class PiperProvider {
         if (pendingTest) {
           clearTimeout(pendingTest.timer)
           pendingTest.resolve()
+        }
+        return
+      }
+      // TEMPORARY: GitHub fetch-test completion marker.
+      if (message.type === 'github-fetch-test-done') {
+        logPiperDiag('main', 'main:github-fetchtest-done', message.ok ? 'success' : 'failed')
+        const pendingGithubTest = this.githubFetchTestPending
+        this.githubFetchTestPending = null
+        if (pendingGithubTest) {
+          clearTimeout(pendingGithubTest.timer)
+          pendingGithubTest.resolve(message.ok)
         }
         return
       }
@@ -375,6 +390,13 @@ export class PiperProvider {
     timer: ReturnType<typeof setTimeout>
   } | null = null
 
+  // TEMPORARY GitHub fetch-test state (remove with piperDiagnostics.ts).
+  private githubFetchTestPending: {
+    resolve: (ok: boolean) => void
+    reject: (error: Error) => void
+    timer: ReturnType<typeof setTimeout>
+  } | null = null
+
   /**
    * TEMPORARY diagnostic probe (remove with piperDiagnostics.ts).
    * Asks the worker to GET + HEAD the exact manifest config URL and report
@@ -410,6 +432,45 @@ export class PiperProvider {
         clearTimeout(timer)
         pendingTest?.reject(err)
         logPiperDiag('main', 'main:fetchtest-post-failed', err.message)
+      }
+    })
+  }
+
+  /**
+   * TEMPORARY diagnostic probe (remove with piperDiagnostics.ts).
+   * Asks the worker to GET the public GitHub Release config asset.
+   * Writes nothing to OPFS, persists nothing, changes no behavior.
+   */
+  runGithubFetchTest(): Promise<boolean> {
+    if (this.disposed) return Promise.reject(new Error('Piper disposed'))
+    let worker: Worker
+    try {
+      worker = this.ensureWorker()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      logPiperDiag('main', 'main:github-fetchtest-worker-failed', message)
+      return Promise.reject(error instanceof Error ? error : new Error(message))
+    }
+    if (this.githubFetchTestPending) {
+      return Promise.reject(new Error('GitHub fetch test already running'))
+    }
+    logPiperDiag('main', 'main:github-fetchtest-started')
+    return new Promise<boolean>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.githubFetchTestPending = null
+        logPiperDiag('main', 'main:github-fetchtest-timeout', 'no github-fetch-test-done within 90s')
+        reject(new Error('GitHub fetch test timed out'))
+      }, 90000)
+      this.githubFetchTestPending = { resolve, reject, timer }
+      try {
+        worker.postMessage({ type: 'fetch-test-github' } satisfies WorkerIncoming)
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error))
+        const pendingGithubTest = this.githubFetchTestPending
+        this.githubFetchTestPending = null
+        clearTimeout(timer)
+        pendingGithubTest?.reject(err)
+        logPiperDiag('main', 'main:github-fetchtest-post-failed', err.message)
       }
     })
   }
