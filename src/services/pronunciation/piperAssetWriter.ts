@@ -22,7 +22,12 @@
  *   main   → { type: 'chunk', data: ArrayBuffer }   (transferred)
  *   worker → { type: 'ack', bytes: number } | { type: 'error', message }
  *   main   → { type: 'close', expectedBytes?: number, validateJson?: boolean }
- *   worker → { type: 'done', size: number } | { type: 'error', message }
+ *   worker → step diags, then { type: 'done', size: number } | { type: 'error', message }
+ * The completion `done` is posted in its own macrotask (never synchronously
+ * back-to-back with another post): legacy WebKit has lost worker→main
+ * messages issued synchronously one right after another. The owner
+ * additionally verifies completion by reading OPFS itself, so a lost
+ * message can delay but never stall completion.
  * Observability uses { type: 'diag', event, detail?, at }, forwarded by the
  * owner into the shared diagnostic log.
  */
@@ -189,16 +194,21 @@ async function handleClose(expectedBytes?: number, validateJson?: boolean): Prom
     post({ type: 'error', message: 'OPFS writer received close with no open file' })
     return
   }
+  diag('worker:asset-close-received', openName)
+  diag('worker:asset-flush-start', openName)
   try {
     sync.flush()
   } catch {
     // Some implementations flush on close; failure here is non-fatal.
   }
+  diag('worker:asset-flush-complete', openName)
   try {
     sync.close()
   } catch {
     // Ignore — proceed to verification, which is authoritative.
   }
+  diag('worker:asset-handle-closed', openName)
+  diag('worker:asset-verify-start', openName)
   const root = await navigator.storage.getDirectory()
   const dir = await root.getDirectoryHandle('piper')
   const fileHandle = await dir.getFileHandle(openName)
@@ -220,7 +230,13 @@ async function handleClose(expectedBytes?: number, validateJson?: boolean): Prom
       return
     }
   }
+  diag('worker:asset-verify-complete', `${openName} (${file.size} bytes)`)
   diag('worker:asset-write-complete', `${openName} (${file.size} bytes)`)
+  // Yield a macrotask before the completion post: on legacy WebKit a
+  // worker→main post issued synchronously right after another post can be
+  // lost (observed: the diag above arrives, a same-task `done` does not).
+  // setTimeout is universally available, unlike newer scheduler APIs.
+  await new Promise((resolve) => setTimeout(resolve, 0))
   post({ type: 'done', size: file.size })
 }
 

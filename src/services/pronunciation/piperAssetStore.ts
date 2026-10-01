@@ -74,6 +74,25 @@ async function removeCachedAsset(name: string): Promise<void> {
   }
 }
 
+/**
+ * Read a cached file WITHOUT creating anything. Used by close verification
+ * polling so the poll itself can never fabricate a file that looks cached.
+ */
+async function readCachedAssetNoCreate(name: string): Promise<File | undefined> {
+  try {
+    const root = await navigator.storage.getDirectory()
+    const dir = await root.getDirectoryHandle('piper')
+    const handle = await dir.getFileHandle(name)
+    return await handle.getFile()
+  } catch {
+    return undefined
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 function readStoredVersion(): string | null {
   try {
     return window.localStorage.getItem(PIPER_VERSION_STORAGE_KEY)
@@ -287,30 +306,89 @@ async function streamResponseToOpfs(
         onChunk(loaded, total)
       }
     }
-    let finalSize = 0
-    await withTimeout(
-      new Promise<void>((resolve, reject) => {
-        // The 'done' branch of onmessage records the verified size into
-        // doneSize before resolving, so it is valid to read after await.
-        const checkDone = () => {
-          const entry = pending.get('close')
-          if (entry) {
-            pending.delete('close')
-            finalSize = doneSize
-            resolve()
-          }
+    // Close handshake, robust against lost worker messages on legacy
+    // WebKit: the worker's 'done' may never arrive even though the file is
+    // complete (observed on iPhone 8 — the completion diag arrives, the
+    // same-task 'done' post does not). Completion is therefore ALSO verified
+    // by reading OPFS directly from the main thread (reads work fine) —
+    // whichever confirms first wins; a late 'done' is ignored. The poll only
+    // starts after a grace delay so the worker's flush/verify is guaranteed
+    // finished before the main thread can consider the asset cached.
+    const CLOSE_POLL_MS = 500
+    const CLOSE_POLL_START_DELAY_MS = 3000
+    let closeFinished = false
+    const finishClose = () => {
+      closeFinished = true
+    }
+    const messagePath = new Promise<number>((resolve, reject) => {
+      pending.set('close', {
+        resolve: () => {
+          if (closeFinished) return
+          finishClose()
+          finalSize = doneSize
+          logPiperDiag(
+            'main',
+            'main:asset-close-confirmed-by-message',
+            `${name} (${doneSize} bytes)`,
+          )
+          resolve(doneSize)
+        },
+        reject: (e) => {
+          finishClose()
+          reject(e)
+        },
+      })
+      try {
+        logPiperDiag('main', 'main:asset-close-sent', name)
+        worker.postMessage({ type: 'close', expectedBytes, validateJson })
+      } catch (error) {
+        pending.delete('close')
+        finishClose()
+        reject(error instanceof Error ? error : new Error(String(error)))
+      }
+    })
+    const pollPath = (async (): Promise<number> => {
+      // Grace delay: the worker flushes + verifies first; only then may the
+      // main thread treat what it reads as authoritative.
+      await sleep(CLOSE_POLL_START_DELAY_MS)
+      for (;;) {
+        if (closeFinished) {
+          throw new Error('OPFS close superseded by message path')
         }
-        pending.set('close', { resolve: checkDone, reject })
+        let candidate: number | null = null
         try {
-          worker.postMessage({ type: 'close', expectedBytes, validateJson })
-        } catch (error) {
-          pending.delete('close')
-          reject(error instanceof Error ? error : new Error(String(error)))
+          const file = await readCachedAssetNoCreate(name)
+          if (file && file.size > 0 && (expectedBytes === undefined || file.size === expectedBytes)) {
+            if (!validateJson) {
+              candidate = file.size
+            } else {
+              try {
+                JSON.parse(await file.text())
+                candidate = file.size
+              } catch {
+                candidate = null
+              }
+            }
+          }
+        } catch {
+          candidate = null
         }
-      }),
-      60000,
-      `close ${name}`,
-    )
+        if (candidate !== null) {
+          finishClose()
+          logPiperDiag('main', 'main:asset-close-confirmed-by-poll', `${name} (${candidate} bytes)`)
+          return candidate
+        }
+        await sleep(CLOSE_POLL_MS)
+      }
+    })()
+    let finalSize = 0
+    try {
+      finalSize = await withTimeout(Promise.race([messagePath, pollPath]), 60000, `close ${name}`)
+    } finally {
+      // Settle the loser of the race: stops the poll loop, and a late
+      // worker 'done' finds no pending entry and is ignored.
+      finishClose()
+    }
     logPiperDiag('main', `main:asset-${kind}-download-complete`, `${finalSize} bytes → OPFS`)
     return finalSize
   } catch (error) {
