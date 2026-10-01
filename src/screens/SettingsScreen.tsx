@@ -14,6 +14,7 @@ import {
 } from '../services/pronunciation/piperManifest'
 import {
   clearPiperDiag,
+  diagnoseMainThreadFetch,
   getPiperDiagEvents,
   getPiperDiagVersion,
   getPiperDownloadProgress,
@@ -258,6 +259,10 @@ function PiperDiagnostics() {
     void diagnoseGithubFetch()
   }, [])
 
+  const handleMainThreadFetchTest = useCallback(() => {
+    void diagnoseMainThreadFetch()
+  }, [])
+
   const handleClear = useCallback(() => {
     clearPiperDiag()
   }, [])
@@ -370,6 +375,10 @@ function PiperDiagnostics() {
         <div className={`${styles.row} ${styles.rowInteractive}`} onClick={handleGithubFetchTest}>
           <span className={styles.rowLabel}>Test GitHub Worker fetch</span>
           <span className={styles.rowValueSmall}>GET release asset</span>
+        </div>
+        <div className={`${styles.row} ${styles.rowInteractive}`} onClick={handleMainThreadFetchTest}>
+          <span className={styles.rowLabel}>Test main-thread asset fetch</span>
+          <span className={styles.rowValueSmall}>GET config + same-origin</span>
         </div>
         <div className={`${styles.row} ${styles.rowInteractive}`} onClick={handleClear}>
           <span className={styles.rowLabel}>Clear event log</span>
