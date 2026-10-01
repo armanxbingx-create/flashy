@@ -31,6 +31,8 @@ type IncomingMessage =
   | { type: 'init' }
   | { type: 'synthesize'; id: number; text: string }
   | { type: 'cancel'; id: number }
+  // TEMPORARY diagnostic probe (remove with piperDiagnostics.ts).
+  | { type: 'fetch-test' }
 
 type OutgoingMessage =
   | { type: 'ready' }
@@ -39,6 +41,8 @@ type OutgoingMessage =
   | { type: 'error'; id: number | null; message: string }
   // TEMPORARY diagnostic event (remove with piperDiagnostics.ts).
   | { type: 'diag'; event: string; detail?: string; at: number }
+  // TEMPORARY fetch-test completion marker (remove with piperDiagnostics.ts).
+  | { type: 'fetch-test-done' }
 
 const ctx = self as unknown as {
   postMessage(message: OutgoingMessage, transfer?: Transferable[]): void
@@ -274,8 +278,62 @@ function currentSession(): {
   return stored
 }
 
+function describeResponse(response: Response): string {
+  return (
+    `resolved-url=${response.url} status=${response.status} ok=${response.ok} ` +
+    `content-type=${response.headers.get('Content-Type') ?? '—'} ` +
+    `content-length=${response.headers.get('Content-Length') ?? '—'}`
+  )
+}
+
+/**
+ * TEMPORARY diagnostic probe (remove with piperDiagnostics.ts).
+ * Fetches the exact manifest config URL with GET and HEAD to isolate
+ * whether the iOS worker failure happens in fetch() itself or while
+ * reading the body. Reads only — never touches OPFS, never persists.
+ */
+async function runFetchTest(): Promise<void> {
+  try {
+    diag('worker:fetchtest-start', PIPER_CONFIG_URL)
+    // --- GET: fetch() and body read are isolated in separate try blocks.
+    diag('worker:fetchtest-get-fetch-start')
+    let getResponse: Response | null = null
+    try {
+      getResponse = await fetch(PIPER_CONFIG_URL, { method: 'GET' })
+      diag('worker:fetchtest-get-fetch-ok', describeResponse(getResponse))
+    } catch (error) {
+      diag('worker:fetchtest-get-fetch-failed', describeWorkerError(error))
+    }
+    if (getResponse) {
+      diag('worker:fetchtest-get-read-start')
+      try {
+        const buffer = await getResponse.arrayBuffer()
+        diag('worker:fetchtest-get-read-ok', `${buffer.byteLength} bytes read`)
+      } catch (error) {
+        diag('worker:fetchtest-get-read-failed', describeWorkerError(error))
+      }
+    } else {
+      diag('worker:fetchtest-get-read-skipped', 'no response (fetch failed)')
+    }
+    // --- HEAD: isolates header/redirect behavior without a body.
+    diag('worker:fetchtest-head-start')
+    try {
+      const headResponse = await fetch(PIPER_CONFIG_URL, { method: 'HEAD' })
+      diag('worker:fetchtest-head-result', describeResponse(headResponse))
+    } catch (error) {
+      diag('worker:fetchtest-head-failed', describeWorkerError(error))
+    }
+  } finally {
+    post({ type: 'fetch-test-done' })
+  }
+}
+
 ctx.onmessage = (event: MessageEvent<IncomingMessage>) => {
   const message = event.data
+  if (message.type === 'fetch-test') {
+    void runFetchTest()
+    return
+  }
   if (message.type === 'init') {
     diag('worker:init-received')
     void ensureSession().then(

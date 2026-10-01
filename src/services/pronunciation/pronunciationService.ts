@@ -121,6 +121,21 @@ class CompositePronunciationService implements PronunciationProvider {
     this.piper = null
     this.webSpeech.cancel()
   }
+
+  /**
+   * TEMPORARY diagnostic entry point (remove with piperDiagnostics.ts).
+   * Runs the worker fetch probe (GET + HEAD of the manifest config URL).
+   * Writes nothing, persists nothing, speaks nothing.
+   */
+  runFetchTestForDiagnostics(): Promise<void> {
+    const piper = this.ensurePiper()
+    if (!piper) {
+      logPiperDiag('main', 'main:diag-fetchtest', 'ensurePiper returned null (OPFS unsupported)')
+      return Promise.reject(new Error('OPFS unsupported'))
+    }
+    logPiperDiag('main', 'main:diag-fetchtest', 'fetch test requested from Settings diagnostics')
+    return piper.runFetchTest()
+  }
 }
 
 let singleton: CompositePronunciationService | null = null
@@ -142,5 +157,25 @@ export function diagnosePiperWarmUp(): void {
     singleton.warmUpForDiagnostics()
   } catch (error) {
     logPiperDiag('main', 'main:diag-warmup-failed', formatDiagError(error))
+  }
+}
+
+/**
+ * TEMPORARY diagnostic entry point (remove with piperDiagnostics.ts).
+ * Probes worker fetch (GET + HEAD) without writing, persisting, or speaking.
+ */
+export function diagnoseWorkerFetch(): Promise<void> {
+  try {
+    if (!singleton) singleton = new CompositePronunciationService()
+    return singleton.runFetchTestForDiagnostics().catch((error: unknown) => {
+      logPiperDiag(
+        'main',
+        'main:diag-fetchtest-failed',
+        error instanceof Error ? error.message : String(error),
+      )
+    })
+  } catch (error) {
+    logPiperDiag('main', 'main:diag-fetchtest-failed', formatDiagError(error))
+    return Promise.resolve()
   }
 }

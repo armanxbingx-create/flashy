@@ -23,6 +23,7 @@ import {
 } from '../services/pronunciation/piperDiagnostics'
 import {
   diagnosePiperWarmUp,
+  diagnoseWorkerFetch,
   getPronunciationService,
 } from '../services/pronunciation/pronunciationService'
 import styles from './SettingsScreen.module.css'
@@ -248,6 +249,10 @@ function PiperDiagnostics() {
     diagnosePiperWarmUp()
   }, [])
 
+  const handleFetchTest = useCallback(() => {
+    void diagnoseWorkerFetch()
+  }, [])
+
   const handleClear = useCallback(() => {
     clearPiperDiag()
   }, [])
@@ -352,6 +357,10 @@ function PiperDiagnostics() {
       <div className={styles.groupCard}>
         <div className={`${styles.row} ${styles.rowInteractive}`} onClick={handleWarmUp}>
           <span className={styles.rowLabel}>Start Piper warm-up (no audio)</span>
+        </div>
+        <div className={`${styles.row} ${styles.rowInteractive}`} onClick={handleFetchTest}>
+          <span className={styles.rowLabel}>Test Worker fetch</span>
+          <span className={styles.rowValueSmall}>GET + HEAD config URL</span>
         </div>
         <div className={`${styles.row} ${styles.rowInteractive}`} onClick={handleClear}>
           <span className={styles.rowLabel}>Clear event log</span>

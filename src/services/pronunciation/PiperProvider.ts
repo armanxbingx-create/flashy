@@ -27,11 +27,15 @@ type WorkerOutgoing =
   | { type: 'error'; id: number | null; message: string }
   // TEMPORARY diagnostic event forwarded from the worker.
   | { type: 'diag'; event: string; detail?: string; at: number }
+  // TEMPORARY fetch-test completion marker forwarded from the worker.
+  | { type: 'fetch-test-done' }
 
 type WorkerIncoming =
   | { type: 'init' }
   | { type: 'synthesize'; id: number; text: string }
   | { type: 'cancel'; id: number }
+  // TEMPORARY diagnostic probe (remove with piperDiagnostics.ts).
+  | { type: 'fetch-test' }
 
 export function piperOpfsSupported(): boolean {
   try {
@@ -152,6 +156,17 @@ export class PiperProvider {
       // TEMPORARY: forward worker lifecycle events to the diag log.
       if (message.type === 'diag') {
         logPiperDiag('worker', message.event, message.detail)
+        return
+      }
+      // TEMPORARY: fetch-test completion marker.
+      if (message.type === 'fetch-test-done') {
+        logPiperDiag('main', 'main:fetchtest-done')
+        const pendingTest = this.fetchTestPending
+        this.fetchTestPending = null
+        if (pendingTest) {
+          clearTimeout(pendingTest.timer)
+          pendingTest.resolve()
+        }
         return
       }
       if (message.type === 'progress') {
@@ -351,6 +366,52 @@ export class PiperProvider {
       }
     }
     this.stopAudio()
+  }
+
+  // TEMPORARY fetch-test state (remove with piperDiagnostics.ts).
+  private fetchTestPending: {
+    resolve: () => void
+    reject: (error: Error) => void
+    timer: ReturnType<typeof setTimeout>
+  } | null = null
+
+  /**
+   * TEMPORARY diagnostic probe (remove with piperDiagnostics.ts).
+   * Asks the worker to GET + HEAD the exact manifest config URL and report
+   * back. Writes nothing to OPFS, persists nothing, changes no behavior.
+   */
+  runFetchTest(): Promise<void> {
+    if (this.disposed) return Promise.reject(new Error('Piper disposed'))
+    let worker: Worker
+    try {
+      worker = this.ensureWorker()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      logPiperDiag('main', 'main:fetchtest-worker-failed', message)
+      return Promise.reject(error instanceof Error ? error : new Error(message))
+    }
+    if (this.fetchTestPending) {
+      return Promise.reject(new Error('Fetch test already running'))
+    }
+    logPiperDiag('main', 'main:fetchtest-started')
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.fetchTestPending = null
+        logPiperDiag('main', 'main:fetchtest-timeout', 'no fetch-test-done within 90s')
+        reject(new Error('Fetch test timed out'))
+      }, 90000)
+      this.fetchTestPending = { resolve, reject, timer }
+      try {
+        worker.postMessage({ type: 'fetch-test' } satisfies WorkerIncoming)
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error))
+        const pendingTest = this.fetchTestPending
+        this.fetchTestPending = null
+        clearTimeout(timer)
+        pendingTest?.reject(err)
+        logPiperDiag('main', 'main:fetchtest-post-failed', err.message)
+      }
+    })
   }
 
   dispose(): void {
